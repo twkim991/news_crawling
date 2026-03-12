@@ -1,52 +1,70 @@
 TECH_CATEGORY_DEFS = {
     "AI/ML": (
         "artificial intelligence and machine learning technologies such as "
-        "OpenAI, GPT, LLM, generative AI, PyTorch, TensorFlow, model training, "
-        "model inference, NLP, computer vision, and recommendation systems"
+        "OpenAI, ChatGPT, GPT, Claude, Anthropic, Gemini, LLM, generative AI, "
+        "AI agents, AI assistant, AI coding assistant, Copilot, Cursor, Windsurf, "
+        "model training, model inference, fine-tuning, prompt engineering, "
+        "retrieval augmented generation, RAG, embeddings, vector databases for AI, "
+        "natural language processing, NLP, computer vision, recommendation systems, "
+        "deep learning, neural networks, PyTorch, TensorFlow, Hugging Face, AI automation"
     ),
-    "Language": (
-        "programming and query languages such as Python, Java, JavaScript, "
-        "TypeScript, Go, Rust, C++, C#, PHP, Ruby, Kotlin, Swift, SQL, and "
-        "other languages used to write software, scripts, applications, and data queries"
+    "Programming Languages": (
+        "programming and query languages such as Python, Java, JavaScript, TypeScript, "
+        "Go, Rust, C, C++, C#, Kotlin, Swift, PHP, Ruby, Scala, SQL, GraphQL, "
+        "language syntax, compilers, interpreters, language ecosystem, language updates"
     ),
-    "Framework": (
-        "frameworks, libraries, runtimes, SDKs, and development platforms such as "
-        "React, Next.js, Vue, Angular, Spring, Django, FastAPI, Express, Node.js, "
-        ".NET, Laravel, Flutter, and development tools used to build applications and services"
+    "Frameworks & Libraries": (
+        "application development frameworks, libraries, runtimes, SDKs, and app platforms such as "
+        "React, Next.js, Vue, Angular, Svelte, Spring, Spring Boot, Django, Flask, FastAPI, "
+        "Express, Node.js, NestJS, .NET, ASP.NET, Laravel, Rails, Flutter, React Native, "
+        "build tools, package ecosystem, frontend frameworks, backend frameworks"
     ),
-    "DB/Storage": (
-        "databases, caches, search engines, vector databases, object storage, and "
-        "persistence technologies such as MySQL, PostgreSQL, MongoDB, Redis, "
-        "Elasticsearch, OpenSearch, Cassandra, DynamoDB, S3, and storage engines"
+    "Data & Databases": (
+        "databases, storage, search, caching, analytics, and data systems such as "
+        "MySQL, PostgreSQL, MongoDB, Redis, Elasticsearch, OpenSearch, Cassandra, "
+        "DynamoDB, Snowflake, BigQuery, data warehouse, data lake, ETL, ELT, "
+        "data pipeline, stream processing, Kafka, Spark, Flink, Airflow, dbt, "
+        "vector database, search engine, storage systems"
     ),
-    "Infra/Cloud": (
-        "cloud and infrastructure technologies such as AWS, Azure, Google Cloud, "
-        "hosting, networking, compute resources, virtual machines, containers, "
-        "CDN, load balancers, and infrastructure services for running systems"
+    "Cloud & Infrastructure": (
+        "cloud computing and infrastructure technologies such as AWS, Azure, Google Cloud, "
+        "server infrastructure, networking, CDN, DNS, virtual machines, containers, "
+        "load balancers, edge computing, hosting, infrastructure services, platform services, "
+        "Kubernetes infrastructure, cloud platform architecture"
     ),
-    "Data Engineering/Messaging": (
-        "data engineering and messaging systems such as Kafka, Spark, Hadoop, Airflow, "
-        "Flink, ETL, ELT, stream processing, data pipelines, warehousing, "
-        "event-driven architecture, and messaging infrastructure"
-    ),
-    "DevOps/Automation": (
-        "DevOps and automation tools such as Docker, Kubernetes, GitHub Actions, "
-        "GitLab CI, Jenkins, Terraform, Ansible, CI/CD, orchestration, "
-        "infrastructure as code, monitoring, observability, and workflow automation"
+    "DevOps & Platform Engineering": (
+        "DevOps, deployment, automation, CI/CD, platform engineering, observability, "
+        "site reliability engineering, SRE, workflow automation, infrastructure as code, "
+        "Docker, Kubernetes, Jenkins, GitHub Actions, GitLab CI, Terraform, Ansible, "
+        "ArgoCD, monitoring, logging, tracing, incident response, release automation, cron jobs"
     ),
     "Security": (
-        "cyber security technologies such as vulnerability management, malware detection, "
-        "identity and access management, IAM, encryption, zero trust, application security, "
-        "cloud security, endpoint security, threat detection, and security operations"
+        "cyber security and information security such as vulnerability management, "
+        "zero day, malware, ransomware, phishing, IAM, identity and access management, "
+        "encryption, authentication, authorization, endpoint security, network security, "
+        "application security, AppSec, DevSecOps, cloud security, threat detection, "
+        "security operations, data protection, privacy, compliance"
     ),
-    "Collaboration/Utility": (
-        "developer productivity and collaboration tools such as GitHub, GitLab, Jira, "
-        "Confluence, Postman, Swagger, IDEs, package managers, testing frameworks, "
-        "documentation tools, API tools, and general developer utility software"
+    "Developer Tools & Collaboration": (
+        "developer productivity, testing, API tools, IDEs, collaboration platforms, "
+        "source control, project management, and general engineering tools such as "
+        "GitHub, GitLab, Jira, Confluence, Postman, Swagger, VS Code, IntelliJ, "
+        "package managers, npm, yarn, pnpm, pip, testing frameworks, documentation tools, "
+        "code review tools, issue tracking, team collaboration tools"
+    ),
+    "Mobile & Client Platforms": (
+        "mobile development and client application platforms such as Android, iOS, "
+        "SwiftUI, Jetpack Compose, mobile SDKs, mobile app frameworks, cross-platform apps, "
+        "desktop clients, app store ecosystem, front-end client platform technologies"
+    ),
+    "Tech Business & Industry": (
+        "technology company strategy, product launch, startup ecosystem, funding, acquisition, "
+        "developer market trends, platform competition, pricing, product adoption, "
+        "technology industry business news, enterprise software market, company roadmap"
     ),
     "Other Tech": (
-        "general technology news about computing, software, hardware, devices, "
-        "science, innovation, and technology that does not fit the other categories clearly"
+        "general technology news about software, hardware, computing, devices, science, "
+        "innovation, and technology topics that do not fit clearly into the other categories"
     ),
 }
 
