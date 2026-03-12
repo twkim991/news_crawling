@@ -38,9 +38,9 @@ def build_text(title: str, description: str, content: str = "") -> str:
     content = clean_text(content)
 
     if description:
-        text = f"{title}. {description}".strip()
+        text = f"{title}. {title}. {description}".strip()
     elif content:
-        text = f"{title}. {content}".strip()
+        text = f"{title}. {title}. {content}".strip()
     else:
         text = title.strip()
 
