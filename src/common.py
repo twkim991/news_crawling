@@ -8,16 +8,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from taxonomy import TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_SCORE, SUBCATEGORY_MIN_GAP
 
-
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[Model] device: {DEVICE}")
 
 embed_model = SentenceTransformer(
-    "sentence-transformers/all-MiniLM-L6-v2",
+    "intfloat/multilingual-e5-small",
     device=DEVICE
 )
-
 
 def clean_text(text: str) -> str:
     if text is None:
@@ -37,10 +34,10 @@ def build_text(title: str, description: str, content: str = "") -> str:
     description = clean_text(description)
     content = clean_text(content)
 
-    if description:
+    if content:
+        text = f"{title}. {title}. {description}. {content}".strip()
+    elif description:
         text = f"{title}. {title}. {description}".strip()
-    elif content:
-        text = f"{title}. {title}. {content}".strip()
     else:
         text = title.strip()
 
