@@ -8,7 +8,13 @@ def load_binary_classifier(path):
     return joblib.load(path)
 
 
-def predict_binary(df, model, batch_size: int = 256):
+def predict_binary(
+    df,
+    model,
+    batch_size: int = 256,
+    proba_threshold: float = 0.5,
+    uncertainty_margin: float = 0.10,
+):
     texts = df["text"].tolist()
     total = len(texts)
 
@@ -21,11 +27,17 @@ def predict_binary(df, model, batch_size: int = 256):
 
     embeddings = np.vstack(embeddings)
 
-    print(model.predict_proba(embeddings)[:10])
+    probas = model.predict_proba(embeddings)
+    tech_probs = probas[:, 1]
+    preds = (tech_probs >= proba_threshold).astype(int)
 
-    preds = model.predict(embeddings)
+    confidence = np.abs(tech_probs - 0.5) * 2
+    uncertain = np.abs(tech_probs - 0.5) < uncertainty_margin
 
     df = df.copy()
     df["tech_pred"] = preds
+    df["tech_score"] = tech_probs
+    df["prediction_confidence"] = confidence
+    df["is_uncertain"] = uncertain
 
     return df

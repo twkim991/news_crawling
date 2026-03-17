@@ -11,6 +11,11 @@
    - AG + NewsAPI 데이터 전처리
    - 이진분류기 추론으로 tech 기사 필터링
    - 임베딩 유사도 기반 세부 기술 카테고리 분류
+4. **SSAFY 한국어 뉴스 분석 (`src/ssafy_news_pipeline.py`)**
+   - CSV 컬럼 구조 자동 매핑(한/영 컬럼 대응, `|` 구분자/멀티라인 본문 대응)
+   - 스키마/결측 비율 프로파일 JSON 생성
+   - 이진분류 확률 기반 `tech_score`, `is_uncertain` 추가
+   - 품질 플래그 기반 저품질/불확실 기사 제거 후 제로샷 세부분류
 
 ## 핵심 디렉터리
 - `src/`: 파이프라인 소스 코드
@@ -24,6 +29,14 @@
 python src/ag_pipeline.py
 python src/newsapi_pipeline.py
 python src/pipeline.py
+```
+
+SSAFY 한국어 뉴스 파일 사용 예시:
+```bash
+python src/ssafy_news_pipeline.py \
+  --input data/raw/ssafy_dataset_news_2025_1st_half.csv \
+  --output outputs/final_ssafy_tech_news.csv \
+  --profile outputs/ssafy_profile.json
 ```
 
 ## 참고
