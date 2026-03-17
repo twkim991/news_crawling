@@ -1,7 +1,7 @@
 from loaders import load_ag_news, load_newsapi
 from preprocess import preprocess_dataframe
-from classifier import load_binary_classifier, predict_binary, classify_subcategory
-from taxonomy import TECH_CATEGORY_DEFS
+from classifier import load_binary_classifier, predict_binary
+from common import classify_subcategory
 
 import pandas as pd
 
@@ -62,7 +62,7 @@ def run_pipeline():
 
     print("Subcategory classification")
 
-    tech_df = classify_subcategory(tech_df, TECH_CATEGORY_DEFS)
+    tech_df = classify_subcategory(tech_df)
 
     for source_name, group in tech_df.groupby("source"):
         safe_name = str(source_name).lower().replace("/", "_")
