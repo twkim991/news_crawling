@@ -72,6 +72,7 @@ def apply_metadata_prior(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     cat_text = (df["category"].astype(str) + " " + df["description"].astype(str)).str.lower()
+    cat_text = cat_text.fillna("").astype(str)
 
     df["is_non_tech_meta"] = cat_text.apply(lambda x: bool(NON_TECH_CATEGORY_REGEX.search(x)))
     df["has_tech_meta"] = cat_text.apply(lambda x: bool(TECH_KEYWORD_REGEX.search(x)))
@@ -128,7 +129,7 @@ def _safe_makedirs_for_file(path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="SSAFY 한국어 뉴스 품질강화 + 분류 파이프라인")
-    parser.add_argument("--input", required=True, help="raw CSV path")
+    parser.add_argument("--input", default="data/raw/ssafy_dataset_news_2025_1st_half.csv", help="raw CSV path")
     parser.add_argument("--model", default="models/ag_binary_logreg.joblib", help="binary classifier path")
     parser.add_argument("--output", default="outputs/final_ssafy_tech_news.csv", help="final output csv path")
     parser.add_argument("--profile", default="outputs/ssafy_profile.json", help="schema/profile json path")
