@@ -1,5 +1,7 @@
 import pandas as pd
 
+from common import ensure_schema
+
 
 LABEL_MAP = {
     1: "World",
@@ -23,13 +25,12 @@ def load_ag_news(path):
 
     df["text"] = df["title"].astype(str) + ". " + df["description"].astype(str)
 
-    return df
+    return ensure_schema(df, source_name="AG")
 
 
 def load_newsapi(path):
     df = pd.read_csv(path)
-
-    df["source"] = "NewsAPI"
+    df = ensure_schema(df, source_name="NewsAPI")
 
     df["title"] = df["title"].fillna("")
     df["description"] = df["description"].fillna("")
@@ -37,4 +38,11 @@ def load_newsapi(path):
 
     df["text"] = df["title"] + ". " + df["description"]
 
+    return df
+
+
+def load_ssafy_processed(path):
+    df = pd.read_csv(path)
+    df = ensure_schema(df)
+    df["source"] = df["source"].fillna("").replace("", "SSAFY")
     return df

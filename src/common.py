@@ -1,5 +1,6 @@
 from functools import lru_cache
 import re
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,8 @@ URL_RE = re.compile(r"http\S+|www\.\S+")
 WHITESPACE_RE = re.compile(r"[\r\n\t]+")
 MULTISPACE_RE = re.compile(r"\s+")
 
+REQUIRED_SCHEMA_COLUMNS = ["title", "description", "content", "url", "published_at", "source"]
+
 
 def clean_text(text: str) -> str:
     if text is None:
@@ -31,7 +34,6 @@ def clean_text(text: str) -> str:
     cleaned = URL_RE.sub(" ", cleaned)
     cleaned = WHITESPACE_RE.sub(" ", cleaned)
     return MULTISPACE_RE.sub(" ", cleaned).strip()
-
 
 
 def _clean_text_series(series: pd.Series) -> pd.Series:
@@ -51,6 +53,19 @@ def _get_text_column(df: pd.DataFrame, column: str) -> pd.Series:
     return _clean_text_series(df[column]) if column in df else pd.Series("", index=df.index, dtype="object")
 
 
+def ensure_schema(df: pd.DataFrame, *, source_name: str | None = None) -> pd.DataFrame:
+    normalized = df.copy()
+    for column in REQUIRED_SCHEMA_COLUMNS:
+        if column not in normalized.columns:
+            normalized[column] = ""
+
+    if source_name is not None:
+        normalized["source"] = source_name
+    else:
+        normalized["source"] = normalized["source"].fillna("").replace("", "unknown")
+
+    return normalized
+
 
 def build_text(title: str, description: str, content: str = "") -> str:
     title = clean_text(title)
@@ -67,8 +82,8 @@ def build_text(title: str, description: str, content: str = "") -> str:
     return MULTISPACE_RE.sub(" ", text).strip()
 
 
-
 def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
+    df = ensure_schema(df)
     df = df.copy()
 
     title_clean = _get_text_column(df, "title")
@@ -102,10 +117,9 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates(subset=["text"]).reset_index(drop=True)
 
 
-
-def encode_texts(texts, batch_size=64):
+def encode_texts(texts: Iterable[str], batch_size: int = 64):
     return embed_model.encode(
-        texts,
+        list(texts),
         batch_size=batch_size,
         show_progress_bar=True,
         convert_to_numpy=True,
@@ -119,7 +133,6 @@ def _get_category_embeddings():
     print("[Subcategory] Encode category definitions")
     category_embeddings = encode_texts(list(TECH_CATEGORY_DEFS.values()), batch_size=16)
     return category_names, category_embeddings
-
 
 
 def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
