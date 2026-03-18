@@ -29,7 +29,7 @@ def main():
 
     print("\nSaved:", output_path)
     for report_name, report_path in trend_paths.items():
-        print(f"{report_name} trends: {report_path}")
+        print(f"{report_name}: {report_path}")
 
 
 if __name__ == "__main__":

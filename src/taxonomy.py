@@ -1,90 +1,199 @@
-TECH_CATEGORY_DEFS = {
-    "AI/ML": (
-        "artificial intelligence, AI, machine learning, ML, deep learning, neural networks, "
-        "generative AI, large language models, LLM, foundation models, AI agents, AI assistants, "
-        "natural language processing, NLP, computer vision, recommendation systems, "
-        "model training, model inference, fine tuning, prompt engineering, "
-        "retrieval augmented generation, RAG, embeddings, vector databases, "
-        "인공지능, 머신러닝, 딥러닝, 생성형 AI, 대규모 언어모델, 자연어 처리, 컴퓨터 비전, 멀티모달, 추론 모델, AI 반도체"
-    ),
-
-    "Programming Languages": (
-        "programming languages and query languages such as Python, Java, JavaScript, TypeScript, "
-        "Go, Rust, C, C++, C#, Kotlin, Swift, PHP, Ruby, Scala, SQL, GraphQL, "
-        "language runtime, compilers, interpreters, language ecosystem, language updates, "
-        "프로그래밍 언어, 개발 언어, 컴파일러, 인터프리터, 언어 표준, 런타임"
-    ),
-
-    "Frameworks & Libraries": (
-        "software frameworks, libraries, SDKs, runtimes, and application platforms such as "
-        "React, Next.js, Vue, Angular, Svelte, Spring, Spring Boot, Django, Flask, FastAPI, "
-        "Express, Node.js, NestJS, .NET, ASP.NET, Laravel, Rails, Flutter, React Native, "
-        "frontend frameworks, backend frameworks, application frameworks, package ecosystem, "
-        "프레임워크, 라이브러리, 애플리케이션 개발 플랫폼, 오픈소스 프레임워크"
-    ),
-
-    "Data & Databases": (
-        "databases, storage systems, search engines, caching systems, and data platforms such as "
-        "MySQL, PostgreSQL, MongoDB, Redis, Elasticsearch, OpenSearch, Cassandra, DynamoDB, "
-        "Snowflake, BigQuery, data warehouse, data lake, ETL, ELT, data pipelines, "
-        "stream processing, Kafka, Spark, Flink, Airflow, dbt, analytics platforms, "
-        "데이터베이스, 데이터 플랫폼, 데이터 파이프라인, 데이터 분석, 데이터 거버넌스"
-    ),
-
-    "Cloud & Infrastructure": (
-        "cloud computing platforms and infrastructure technologies such as AWS, Azure, "
-        "Google Cloud, server infrastructure, networking, CDN, DNS, virtual machines, "
-        "containers, load balancers, edge computing, hosting services, platform services, "
-        "cloud architecture, infrastructure platforms, "
-        "클라우드 컴퓨팅, 서버 인프라, 네트워크 인프라, 데이터센터, 클라우드 네이티브"
-    ),
-
-    "DevOps & Platform Engineering": (
-        "DevOps practices, deployment automation, CI/CD pipelines, platform engineering, "
-        "site reliability engineering, SRE, infrastructure as code, automation workflows, "
-        "Docker, Kubernetes, Jenkins, GitHub Actions, GitLab CI, Terraform, Ansible, ArgoCD, "
-        "monitoring, logging, tracing, observability, release automation, incident response, "
-        "데브옵스, 배포 자동화, CI/CD, 플랫폼 엔지니어링, 쿠버네티스 운영"
-    ),
-
-    "Security": (
-        "cybersecurity, information security, vulnerability management, zero day exploits, "
-        "malware, ransomware, phishing, threat detection, security operations, "
-        "identity and access management, IAM, authentication, authorization, encryption, "
-        "application security, AppSec, DevSecOps, cloud security, data protection, privacy, "
-        "사이버 보안, 정보 보안, 취약점, 암호화, 인증, 접근 제어, 개인정보보호, 보안 사고"
-    ),
-
-    "Developer Tools & Collaboration": (
-        "developer productivity tools, testing tools, API development tools, IDEs, "
-        "version control systems, collaboration platforms, project management tools such as "
-        "GitHub, GitLab, Jira, Confluence, Postman, Swagger, VS Code, IntelliJ, "
-        "package managers such as npm, yarn, pnpm, pip, build tools, testing frameworks, "
-        "documentation tools, code review tools, issue tracking systems, "
-        "개발 도구, 협업 도구, 버전 관리, 코드 리뷰, 개발 생산성"
-    ),
-
-    "Mobile & Client Platforms": (
-        "mobile development platforms and client application technologies such as "
-        "Android, iOS, SwiftUI, Jetpack Compose, mobile SDKs, mobile app frameworks, "
-        "cross platform apps, desktop client applications, front end client platforms, "
-        "모바일 개발, 모바일 애플리케이션 플랫폼, 앱스토어, 모바일 SDK"
-    ),
-
-    "Tech Business & Industry": (
-        "technology industry business news including product launches, company strategy, "
-        "startup ecosystem, venture funding, acquisitions, mergers, developer market trends, "
-        "platform competition, enterprise software market, product adoption, pricing models, "
-        "technology companies, tech industry trends, "
-        "기술 산업 동향, IT 산업, 스타트업 투자, 기술 기업 전략, 빅테크 실적"
-    ),
-
-    "Other Tech": (
-        "general technology news about software, hardware, computing systems, devices, "
-        "innovation, science and technology developments that do not clearly fit "
-        "into the other technology categories, "
-        "일반 기술 뉴스, 소프트웨어와 하드웨어 관련 기술 동향, 기술 정책"
-    ),
+TECH_STACK_TAXONOMY = {
+    "AI/ML": {
+        "description": (
+            "artificial intelligence, machine learning, generative AI, large language models, agent systems, "
+            "multimodal models, vector search, model serving, inference optimization, AI platforms, "
+            "인공지능, 머신러닝, 생성형 AI, LLM, 모델 서빙, AI 플랫폼"
+        ),
+        "stacks": {
+            "OpenAI": ["openai", "chatgpt", "gpt-4", "gpt-4.1", "gpt-4o", "o1", "o3"],
+            "Anthropic": ["anthropic", "claude"],
+            "Google Gemini": ["gemini", "vertex ai", "google ai studio"],
+            "Meta Llama": ["llama", "meta ai"],
+            "Hugging Face": ["hugging face", "transformers", "diffusers"],
+            "LangChain": ["langchain", "langgraph"],
+            "PyTorch": ["pytorch"],
+            "TensorFlow": ["tensorflow", "keras"],
+            "Ollama": ["ollama"],
+            "Vector DB": ["pinecone", "weaviate", "milvus", "faiss", "chromadb", "qdrant"],
+        },
+    },
+    "Programming Languages": {
+        "description": (
+            "programming languages, runtimes, compilers, interpreters, package ecosystems, language standards, "
+            "프로그래밍 언어, 런타임, 컴파일러"
+        ),
+        "stacks": {
+            "Python": ["python", "cpython", "pypi"],
+            "Java": ["java", "openjdk", "jdk"],
+            "JavaScript": ["javascript", "ecmascript"],
+            "TypeScript": ["typescript", "tsc"],
+            "Go": ["golang", "go language", "go 1."],
+            "Rust": ["rust", "cargo"],
+            "Kotlin": ["kotlin"],
+            "Swift": ["swift", "swiftlang"],
+            "C#": ["c#", ".net c#"],
+            "SQL": ["sql", "postgres sql", "mysql sql"],
+        },
+    },
+    "Frameworks & Libraries": {
+        "description": (
+            "application frameworks, frontend frameworks, backend frameworks, SDKs, libraries, developer runtimes, "
+            "프레임워크, 라이브러리, SDK"
+        ),
+        "stacks": {
+            "React": ["react", "reactjs"],
+            "Next.js": ["next.js", "nextjs"],
+            "Vue": ["vue", "vue.js"],
+            "Angular": ["angular"],
+            "Node.js": ["node.js", "nodejs"],
+            "Spring": ["spring framework", "spring", "spring boot"],
+            "Django": ["django"],
+            "FastAPI": ["fastapi"],
+            "Flutter": ["flutter"],
+            "React Native": ["react native"],
+        },
+    },
+    "Data & Databases": {
+        "description": (
+            "databases, warehouses, stream processing, ETL, analytics engineering, search platforms, data pipelines, "
+            "데이터베이스, 데이터 파이프라인, 분석 플랫폼"
+        ),
+        "stacks": {
+            "PostgreSQL": ["postgresql", "postgres"],
+            "MySQL": ["mysql"],
+            "MongoDB": ["mongodb", "mongo db"],
+            "Redis": ["redis"],
+            "Elasticsearch": ["elasticsearch", "elastic stack"],
+            "Kafka": ["kafka", "apache kafka"],
+            "Spark": ["spark", "apache spark", "pyspark"],
+            "Snowflake": ["snowflake"],
+            "BigQuery": ["bigquery", "big query"],
+            "dbt": ["dbt", "data build tool"],
+        },
+    },
+    "Cloud & Infrastructure": {
+        "description": (
+            "cloud platforms, compute infrastructure, networking, hosting, containers, edge, platform services, "
+            "클라우드, 인프라, 호스팅, 컨테이너"
+        ),
+        "stacks": {
+            "AWS": ["aws", "amazon web services", "ec2", "s3", "bedrock"],
+            "Azure": ["azure", "microsoft azure", "azure openai"],
+            "Google Cloud": ["google cloud", "gcp"],
+            "Cloudflare": ["cloudflare", "workers"],
+            "Vercel": ["vercel"],
+            "Netlify": ["netlify"],
+            "Docker": ["docker", "docker desktop"],
+            "Kubernetes": ["kubernetes", "k8s"],
+            "OpenShift": ["openshift"],
+            "VMware": ["vmware", "vsphere"],
+        },
+    },
+    "DevOps & Platform Engineering": {
+        "description": (
+            "continuous integration, deployment automation, platform engineering, observability, infrastructure as code, "
+            "CI/CD, 데브옵스, 플랫폼 엔지니어링"
+        ),
+        "stacks": {
+            "GitHub Actions": ["github actions"],
+            "GitLab CI": ["gitlab ci", "gitlab pipeline"],
+            "Jenkins": ["jenkins"],
+            "Terraform": ["terraform", "opentofu"],
+            "Ansible": ["ansible"],
+            "ArgoCD": ["argocd", "argo cd"],
+            "Prometheus": ["prometheus"],
+            "Grafana": ["grafana"],
+            "Datadog": ["datadog"],
+            "Sentry": ["sentry"],
+        },
+    },
+    "Security": {
+        "description": (
+            "application security, cloud security, identity, access control, threat detection, encryption, incident response, "
+            "보안, 인증, 접근 제어, 위협 탐지"
+        ),
+        "stacks": {
+            "CrowdStrike": ["crowdstrike"],
+            "Okta": ["okta"],
+            "Cloud Security": ["wiz", "lacework", "prisma cloud"],
+            "Vault": ["vault", "hashicorp vault"],
+            "Auth0": ["auth0"],
+        },
+    },
+    "Developer Tools & Collaboration": {
+        "description": (
+            "developer productivity, IDEs, source control, code review, testing, API tooling, package management, "
+            "개발 도구, 협업 도구, IDE, 테스트 도구"
+        ),
+        "stacks": {
+            "GitHub": ["github", "copilot"],
+            "GitLab": ["gitlab"],
+            "Jira": ["jira", "atlassian"],
+            "Postman": ["postman"],
+            "Swagger": ["swagger", "openapi"],
+            "VS Code": ["vs code", "vscode", "visual studio code"],
+            "IntelliJ": ["intellij", "jetbrains"],
+            "npm": ["npm"],
+            "pnpm": ["pnpm"],
+        },
+    },
+    "Mobile & Client Platforms": {
+        "description": (
+            "mobile application development, native app platforms, client frameworks, mobile SDKs, "
+            "모바일 개발, 클라이언트 플랫폼"
+        ),
+        "stacks": {
+            "Android": ["android", "jetpack compose"],
+            "iOS": ["ios", "swiftui"],
+            "Flutter": ["flutter"],
+            "React Native": ["react native"],
+        },
+    },
+    "Tech Business & Industry": {
+        "description": (
+            "technology industry strategy, product launches, developer ecosystem competition, platform pricing, enterprise adoption, "
+            "기술 산업 전략, 플랫폼 경쟁, 제품 출시"
+        ),
+        "stacks": {
+            "OpenAI Ecosystem": ["openai", "chatgpt", "api pricing"],
+            "AWS Ecosystem": ["aws", "bedrock", "amazon web services"],
+            "Microsoft Ecosystem": ["microsoft", "github", "azure"],
+            "Google Ecosystem": ["google cloud", "gemini", "android"],
+        },
+    },
+    "Other Tech": {
+        "description": (
+            "general technology news about software, hardware, policy, and innovation that does not map cleanly to a stack, "
+            "일반 기술 뉴스, 기술 정책"
+        ),
+        "stacks": {},
+    },
 }
+
+
+def _build_category_defs() -> dict[str, str]:
+    category_defs = {}
+    for category, info in TECH_STACK_TAXONOMY.items():
+        alias_terms = []
+        for aliases in info["stacks"].values():
+            alias_terms.extend(aliases)
+        category_defs[category] = ", ".join([info["description"], *alias_terms])
+    return category_defs
+
+
+def _build_stack_aliases() -> dict[str, dict[str, object]]:
+    stack_aliases = {}
+    for category, info in TECH_STACK_TAXONOMY.items():
+        for stack_name, aliases in info["stacks"].items():
+            stack_aliases[stack_name] = {
+                "category": category,
+                "aliases": aliases,
+            }
+    return stack_aliases
+
+
+TECH_CATEGORY_DEFS = _build_category_defs()
+STACK_ALIASES = _build_stack_aliases()
 SUBCATEGORY_MIN_SCORE = 0.30
 SUBCATEGORY_MIN_GAP = 0.03

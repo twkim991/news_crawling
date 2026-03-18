@@ -5,9 +5,8 @@ import pandas as pd
 
 from analytics import build_run_metadata, build_trend_reports, save_run_metadata, save_trend_reports
 from classifier import load_binary_classifier, predict_binary
-from common import preprocess_news_df
+from common import classify_subcategory, preprocess_news_df
 from loaders import load_newsapi, load_ssafy_processed
-from common import classify_subcategory
 
 
 def _load_input_frames(newsapi_path: str | None, ssafy_path: str | None) -> tuple[list[pd.DataFrame], list[str]]:
@@ -53,6 +52,11 @@ def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, model_path: s
     tech_df = classify_subcategory(tech_df)
 
     os.makedirs(output_dir, exist_ok=True)
+    tech_df.to_csv(
+        os.path.join(output_dir, "final_tech_news_all_sources.csv"),
+        index=False,
+        encoding="utf-8-sig",
+    )
     for source_name, group in tech_df.groupby("source"):
         safe_name = str(source_name).lower().replace("/", "_").replace(" ", "_")
         group.to_csv(
@@ -77,9 +81,10 @@ def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, model_path: s
     save_run_metadata(metadata, metadata_path)
 
     print("Done")
+    print(f"all sources output: {os.path.join(output_dir, 'final_tech_news_all_sources.csv')}")
     print(f"metadata: {metadata_path}")
     for report_name, report_path in trend_paths.items():
-        print(f"{report_name} trends: {report_path}")
+        print(f"{report_name}: {report_path}")
 
 
 if __name__ == "__main__":
