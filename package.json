@@ -1,5 +1,9 @@
 {
-  "dependencies": {
-    "python-dotenv": "^0.0.1-security"
+  "name": "news_crawling",
+  "private": true,
+  "description": "Python-based news crawling and classification pipelines.",
+  "scripts": {
+    "setup": "python -m pip install -r requirements.txt",
+    "check:imports": "python -c \"import dotenv, joblib, numpy, pandas, requests, sentence_transformers, sklearn, torch\""
   }
 }

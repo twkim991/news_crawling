@@ -2,6 +2,19 @@
 
 뉴스 데이터(AG News, NewsAPI)를 수집/정제하고, 기술 뉴스만 추출해 세부 기술 카테고리로 분류하는 파이프라인입니다.
 
+## 환경 설정
+이 저장소의 실행 코드는 모두 Python으로 작성되어 있습니다. 기존의 `package.json`에 있던 npm 의존성은 실제 런타임과 맞지 않았기 때문에, 현재는 `requirements.txt`를 기준으로 Python 패키지를 설치하도록 정리했습니다.
+
+```bash
+npm run setup
+```
+
+설치 후 아래 명령으로 핵심 Python 의존성이 모두 준비되었는지 확인할 수 있습니다.
+
+```bash
+npm run check:imports
+```
+
 ## 파이프라인 개요
 1. **AG 학습 (`src/ag_pipeline.py`)**
    - AG News를 기반으로 Sci/Tech vs Non-Tech 이진분류기 학습
