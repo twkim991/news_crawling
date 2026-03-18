@@ -55,10 +55,39 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
 
     df["content"] = df["content"].fillna("").astype(str)
 
-    df["text"] = df.apply(
-        lambda row: build_text(row["title"], row["description"], row["content"]),
-        axis=1
+    # Row-wise apply is very slow on large datasets. Build text with vectorized operations.
+    title_clean = (
+        df["title"]
+        .str.replace(r"<[^>]+>", " ", regex=True)
+        .str.replace(r"\s*\[\+\d+\s+chars\]\s*$", "", regex=True)
+        .str.replace(r"http\S+|www\.\S+", " ", regex=True)
+        .str.replace(r"[\r\n\t]+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
     )
+    desc_clean = (
+        df["description"]
+        .str.replace(r"<[^>]+>", " ", regex=True)
+        .str.replace(r"\s*\[\+\d+\s+chars\]\s*$", "", regex=True)
+        .str.replace(r"http\S+|www\.\S+", " ", regex=True)
+        .str.replace(r"[\r\n\t]+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+    content_clean = (
+        df["content"]
+        .str.replace(r"<[^>]+>", " ", regex=True)
+        .str.replace(r"\s*\[\+\d+\s+chars\]\s*$", "", regex=True)
+        .str.replace(r"http\S+|www\.\S+", " ", regex=True)
+        .str.replace(r"[\r\n\t]+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
+    text_with_content = (title_clean + ". " + title_clean + ". " + desc_clean + ". " + content_clean).str.strip()
+    text_without_content = (title_clean + ". " + title_clean + ". " + desc_clean).str.strip()
+    df["text"] = np.where(content_clean.str.len() > 0, text_with_content, np.where(desc_clean.str.len() > 0, text_without_content, title_clean))
+    df["text"] = pd.Series(df["text"], index=df.index).str.replace(r"\s+", " ", regex=True).str.strip()
 
     df = df[df["title"].str.strip() != ""]
     df = df[df["text"].str.len() >= 20]
