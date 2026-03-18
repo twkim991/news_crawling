@@ -1,32 +1,55 @@
+from functools import lru_cache
 import re
+
 import numpy as np
 import pandas as pd
 import torch
-
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from taxonomy import TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_SCORE, SUBCATEGORY_MIN_GAP
+from taxonomy import TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_GAP, SUBCATEGORY_MIN_SCORE
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[Model] device: {DEVICE}")
 
-embed_model = SentenceTransformer(
-    "intfloat/multilingual-e5-small",
-    device=DEVICE
-)
+embed_model = SentenceTransformer("intfloat/multilingual-e5-small", device=DEVICE)
+
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+TRUNCATED_CHARS_RE = re.compile(r"\s*\[\+\d+\s+chars\]\s*$")
+URL_RE = re.compile(r"http\S+|www\.\S+")
+WHITESPACE_RE = re.compile(r"[\r\n\t]+")
+MULTISPACE_RE = re.compile(r"\s+")
+
 
 def clean_text(text: str) -> str:
     if text is None:
         return ""
 
-    text = str(text)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\s*\[\+\d+\s+chars\]\s*$", "", text)
-    text = re.sub(r"http\S+|www\.\S+", " ", text)
-    text = re.sub(r"[\r\n\t]+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    cleaned = str(text)
+    cleaned = HTML_TAG_RE.sub(" ", cleaned)
+    cleaned = TRUNCATED_CHARS_RE.sub("", cleaned)
+    cleaned = URL_RE.sub(" ", cleaned)
+    cleaned = WHITESPACE_RE.sub(" ", cleaned)
+    return MULTISPACE_RE.sub(" ", cleaned).strip()
+
+
+
+def _clean_text_series(series: pd.Series) -> pd.Series:
+    return (
+        series.fillna("")
+        .astype(str)
+        .str.replace(HTML_TAG_RE, " ", regex=True)
+        .str.replace(TRUNCATED_CHARS_RE, "", regex=True)
+        .str.replace(URL_RE, " ", regex=True)
+        .str.replace(WHITESPACE_RE, " ", regex=True)
+        .str.replace(MULTISPACE_RE, " ", regex=True)
+        .str.strip()
+    )
+
+
+def _get_text_column(df: pd.DataFrame, column: str) -> pd.Series:
+    return _clean_text_series(df[column]) if column in df else pd.Series("", index=df.index, dtype="object")
+
 
 
 def build_text(title: str, description: str, content: str = "") -> str:
@@ -41,68 +64,43 @@ def build_text(title: str, description: str, content: str = "") -> str:
     else:
         text = title.strip()
 
-    return re.sub(r"\s+", " ", text).strip()
+    return MULTISPACE_RE.sub(" ", text).strip()
+
 
 
 def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    df["title"] = df["title"].fillna("").astype(str)
-    df["description"] = df["description"].fillna("").astype(str)
+    title_clean = _get_text_column(df, "title")
+    desc_clean = _get_text_column(df, "description")
+    content_clean = _get_text_column(df, "content")
 
-    if "content" not in df.columns:
-        df["content"] = ""
-
-    df["content"] = df["content"].fillna("").astype(str)
-
-    # Row-wise apply is very slow on large datasets. Build text with vectorized operations.
-    title_clean = (
-        df["title"]
-        .str.replace(r"<[^>]+>", " ", regex=True)
-        .str.replace(r"\s*\[\+\d+\s+chars\]\s*$", "", regex=True)
-        .str.replace(r"http\S+|www\.\S+", " ", regex=True)
-        .str.replace(r"[\r\n\t]+", " ", regex=True)
-        .str.replace(r"\s+", " ", regex=True)
-        .str.strip()
-    )
-    desc_clean = (
-        df["description"]
-        .str.replace(r"<[^>]+>", " ", regex=True)
-        .str.replace(r"\s*\[\+\d+\s+chars\]\s*$", "", regex=True)
-        .str.replace(r"http\S+|www\.\S+", " ", regex=True)
-        .str.replace(r"[\r\n\t]+", " ", regex=True)
-        .str.replace(r"\s+", " ", regex=True)
-        .str.strip()
-    )
-    content_clean = (
-        df["content"]
-        .str.replace(r"<[^>]+>", " ", regex=True)
-        .str.replace(r"\s*\[\+\d+\s+chars\]\s*$", "", regex=True)
-        .str.replace(r"http\S+|www\.\S+", " ", regex=True)
-        .str.replace(r"[\r\n\t]+", " ", regex=True)
-        .str.replace(r"\s+", " ", regex=True)
-        .str.strip()
-    )
+    df["title"] = title_clean
+    df["description"] = desc_clean
+    df["content"] = content_clean
 
     text_with_content = (title_clean + ". " + title_clean + ". " + desc_clean + ". " + content_clean).str.strip()
     text_without_content = (title_clean + ". " + title_clean + ". " + desc_clean).str.strip()
-    df["text"] = np.where(content_clean.str.len() > 0, text_with_content, np.where(desc_clean.str.len() > 0, text_without_content, title_clean))
-    df["text"] = pd.Series(df["text"], index=df.index).str.replace(r"\s+", " ", regex=True).str.strip()
+    df["text"] = np.where(
+        content_clean.str.len() > 0,
+        text_with_content,
+        np.where(desc_clean.str.len() > 0, text_without_content, title_clean),
+    )
+    df["text"] = pd.Series(df["text"], index=df.index).str.replace(MULTISPACE_RE, " ", regex=True).str.strip()
 
-    df = df[df["title"].str.strip() != ""]
+    df = df[df["title"].ne("")]
     df = df[df["text"].str.len() >= 20]
 
     if "url" in df.columns:
         df["url"] = df["url"].fillna("").astype(str)
-        df_non_empty_url = df["url"].str.strip() != ""
-        df_non_url = df[~df_non_empty_url]
-        df_with_url = df[df_non_empty_url].drop_duplicates(subset=["url"])
-        df = pd.concat([df_with_url, df_non_url], ignore_index=True)
+        has_url = df["url"].str.strip().ne("")
+        df = pd.concat(
+            [df.loc[has_url].drop_duplicates(subset=["url"]), df.loc[~has_url]],
+            ignore_index=True,
+        )
 
-    df = df.drop_duplicates(subset=["text"])
-    df = df.reset_index(drop=True)
+    return df.drop_duplicates(subset=["text"]).reset_index(drop=True)
 
-    return df
 
 
 def encode_texts(texts, batch_size=64):
@@ -115,59 +113,57 @@ def encode_texts(texts, batch_size=64):
     )
 
 
+@lru_cache(maxsize=1)
+def _get_category_embeddings():
+    category_names = tuple(TECH_CATEGORY_DEFS.keys())
+    print("[Subcategory] Encode category definitions")
+    category_embeddings = encode_texts(list(TECH_CATEGORY_DEFS.values()), batch_size=16)
+    return category_names, category_embeddings
+
+
+
 def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     if df.empty:
-        df["tech_category"] = []
-        df["tech_category_score"] = []
-        df["tech_category_score_gap"] = []
-        df["top2_category"] = []
-        df["top2_score"] = []
+        for column in [
+            "tech_category",
+            "tech_category_score",
+            "tech_category_score_gap",
+            "top2_category",
+            "top2_score",
+        ]:
+            df[column] = pd.Series(dtype="object" if "category" in column else "float64")
         return df
 
-    category_names = list(TECH_CATEGORY_DEFS.keys())
-    category_texts = [TECH_CATEGORY_DEFS[name] for name in category_names]
-
-    print("[Subcategory] Encode category definitions")
-    category_embeddings = encode_texts(category_texts, batch_size=16)
+    category_names, category_embeddings = _get_category_embeddings()
 
     print("[Subcategory] Encode article texts")
     article_embeddings = encode_texts(df["text"].tolist(), batch_size=64)
 
     sims = cosine_similarity(article_embeddings, category_embeddings)
+    top_two_indices = np.argpartition(sims, kth=-2, axis=1)[:, -2:]
+    top_two_scores = np.take_along_axis(sims, top_two_indices, axis=1)
+    top_two_order = np.argsort(top_two_scores, axis=1)[:, ::-1]
+    top_two_indices = np.take_along_axis(top_two_indices, top_two_order, axis=1)
 
-    assigned_categories = []
-    top1_scores = []
-    score_gaps = []
-    top2_categories = []
-    top2_scores = []
+    top1_idx = top_two_indices[:, 0]
+    top2_idx = top_two_indices[:, 1]
+    row_idx = np.arange(len(df))
 
-    for row in sims:
-        sorted_idx = np.argsort(row)[::-1]
+    top1_scores = sims[row_idx, top1_idx].astype(float)
+    top2_scores = sims[row_idx, top2_idx].astype(float)
+    score_gaps = top1_scores - top2_scores
 
-        top1_idx = sorted_idx[0]
-        top2_idx = sorted_idx[1] if len(sorted_idx) > 1 else sorted_idx[0]
+    top1_categories = np.take(category_names, top1_idx)
+    top2_categories = np.take(category_names, top2_idx)
+    final_categories = np.where(
+        (top1_scores < SUBCATEGORY_MIN_SCORE) | (score_gaps < SUBCATEGORY_MIN_GAP),
+        "Other Tech",
+        top1_categories,
+    )
 
-        top1_category = category_names[top1_idx]
-        top2_category = category_names[top2_idx]
-
-        top1_score = float(row[top1_idx])
-        top2_score = float(row[top2_idx])
-        score_gap = top1_score - top2_score
-
-        if top1_score < SUBCATEGORY_MIN_SCORE or score_gap < SUBCATEGORY_MIN_GAP:
-            final_category = "Other Tech"
-        else:
-            final_category = top1_category
-
-        assigned_categories.append(final_category)
-        top1_scores.append(top1_score)
-        score_gaps.append(score_gap)
-        top2_categories.append(top2_category)
-        top2_scores.append(top2_score)
-
-    df["tech_category"] = assigned_categories
+    df["tech_category"] = final_categories
     df["tech_category_score"] = top1_scores
     df["tech_category_score_gap"] = score_gaps
     df["top2_category"] = top2_categories
