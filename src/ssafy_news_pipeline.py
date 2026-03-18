@@ -74,8 +74,8 @@ def apply_metadata_prior(df: pd.DataFrame) -> pd.DataFrame:
     cat_text = (df["category"].astype(str) + " " + df["description"].astype(str)).str.lower()
     cat_text = cat_text.fillna("").astype(str)
 
-    df["is_non_tech_meta"] = cat_text.apply(lambda x: bool(NON_TECH_CATEGORY_REGEX.search(x)))
-    df["has_tech_meta"] = cat_text.apply(lambda x: bool(TECH_KEYWORD_REGEX.search(x)))
+    df["is_non_tech_meta"] = cat_text.str.contains(NON_TECH_CATEGORY_REGEX, na=False)
+    df["has_tech_meta"] = cat_text.str.contains(TECH_KEYWORD_REGEX, na=False)
 
     # 비기술 섹션이면서 기술 단서가 없는 경우는 강하게 제외 후보
     df["meta_drop"] = df["is_non_tech_meta"] & (~df["has_tech_meta"])
@@ -90,8 +90,8 @@ def calculate_quality_flags(df: pd.DataFrame) -> pd.DataFrame:
 
     df["title_len"] = df["title"].astype(str).str.len()
     df["text_len"] = df["text"].astype(str).str.len()
-    df["has_hangul"] = df["text"].astype(str).apply(lambda x: bool(no_hangul_re.search(x)))
-    df["has_ad_noise"] = df["text"].astype(str).apply(lambda x: bool(ad_noise_re.search(x)))
+    df["has_hangul"] = df["text"].astype(str).str.contains(no_hangul_re, na=False)
+    df["has_ad_noise"] = df["text"].astype(str).str.contains(ad_noise_re, na=False)
 
     df["is_short_text"] = df["text_len"] < 40
     df["is_short_title"] = df["title_len"] < 8
@@ -150,13 +150,35 @@ def main():
     print("[SSAFY] load binary model")
     clf = load_binary_classifier(args.model)
 
-    print("[SSAFY] binary inference with confidence")
-    pred_df = predict_binary(
-        norm_df,
-        clf,
-        proba_threshold=args.tech_threshold,
-        uncertainty_margin=args.uncertainty_margin,
-    )
+    # 품질/메타데이터에서 이미 제외될 행은 임베딩 추론을 건너뛰어 대용량 처리 속도를 개선
+    infer_mask = (~norm_df["quality_drop"]) & (~norm_df["meta_drop"])
+    infer_df = norm_df.loc[infer_mask].copy()
+    skipped_rows = int((~infer_mask).sum())
+
+    if infer_df.empty:
+        print("[SSAFY] binary inference skipped (no eligible rows)")
+        pred_df = norm_df.copy()
+        pred_df["tech_pred"] = 0
+        pred_df["tech_score"] = 0.0
+        pred_df["prediction_confidence"] = 0.0
+        pred_df["is_uncertain"] = False
+    else:
+        print(f"[SSAFY] binary inference with confidence on {len(infer_df)} / {len(norm_df)} rows (skipped {skipped_rows})")
+        infer_pred_df = predict_binary(
+            infer_df,
+            clf,
+            proba_threshold=args.tech_threshold,
+            uncertainty_margin=args.uncertainty_margin,
+        )
+
+        pred_df = norm_df.copy()
+        pred_df["tech_pred"] = 0
+        pred_df["tech_score"] = 0.0
+        pred_df["prediction_confidence"] = 0.0
+        pred_df["is_uncertain"] = False
+        pred_df.loc[infer_pred_df.index, ["tech_pred", "tech_score", "prediction_confidence", "is_uncertain"]] = infer_pred_df[
+            ["tech_pred", "tech_score", "prediction_confidence", "is_uncertain"]
+        ]
 
     filtered = pred_df[
         (pred_df["tech_pred"] == 1)
