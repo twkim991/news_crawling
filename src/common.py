@@ -1,5 +1,6 @@
 from functools import lru_cache
 import re
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from taxonomy import TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_GAP, SUBCATEGORY_MIN_SCORE
+from taxonomy import STACK_ALIASES, TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_GAP, SUBCATEGORY_MIN_SCORE
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[Model] device: {DEVICE}")
@@ -20,6 +21,8 @@ URL_RE = re.compile(r"http\S+|www\.\S+")
 WHITESPACE_RE = re.compile(r"[\r\n\t]+")
 MULTISPACE_RE = re.compile(r"\s+")
 
+REQUIRED_SCHEMA_COLUMNS = ["title", "description", "content", "url", "published_at", "source"]
+
 
 def clean_text(text: str) -> str:
     if text is None:
@@ -31,7 +34,6 @@ def clean_text(text: str) -> str:
     cleaned = URL_RE.sub(" ", cleaned)
     cleaned = WHITESPACE_RE.sub(" ", cleaned)
     return MULTISPACE_RE.sub(" ", cleaned).strip()
-
 
 
 def _clean_text_series(series: pd.Series) -> pd.Series:
@@ -51,6 +53,19 @@ def _get_text_column(df: pd.DataFrame, column: str) -> pd.Series:
     return _clean_text_series(df[column]) if column in df else pd.Series("", index=df.index, dtype="object")
 
 
+def ensure_schema(df: pd.DataFrame, *, source_name: str | None = None) -> pd.DataFrame:
+    normalized = df.copy()
+    for column in REQUIRED_SCHEMA_COLUMNS:
+        if column not in normalized.columns:
+            normalized[column] = ""
+
+    if source_name is not None:
+        normalized["source"] = source_name
+    else:
+        normalized["source"] = normalized["source"].fillna("").replace("", "unknown")
+
+    return normalized
+
 
 def build_text(title: str, description: str, content: str = "") -> str:
     title = clean_text(title)
@@ -67,8 +82,8 @@ def build_text(title: str, description: str, content: str = "") -> str:
     return MULTISPACE_RE.sub(" ", text).strip()
 
 
-
 def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
+    df = ensure_schema(df)
     df = df.copy()
 
     title_clean = _get_text_column(df, "title")
@@ -102,10 +117,9 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates(subset=["text"]).reset_index(drop=True)
 
 
-
-def encode_texts(texts, batch_size=64):
+def encode_texts(texts: Iterable[str], batch_size: int = 64):
     return embed_model.encode(
-        texts,
+        list(texts),
         batch_size=batch_size,
         show_progress_bar=True,
         convert_to_numpy=True,
@@ -121,6 +135,77 @@ def _get_category_embeddings():
     return category_names, category_embeddings
 
 
+@lru_cache(maxsize=1)
+def _get_stack_patterns():
+    patterns = {}
+    for stack_name, info in STACK_ALIASES.items():
+        compiled = []
+        for alias in info["aliases"]:
+            normalized = alias.lower().strip()
+            escaped = re.escape(normalized)
+            if re.fullmatch(r"[a-z0-9\.\+#\-\s]+", normalized):
+                pattern = re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])")
+            else:
+                pattern = re.compile(escaped)
+            compiled.append(pattern)
+        patterns[stack_name] = {
+            "category": info["category"],
+            "patterns": tuple(compiled),
+        }
+    return patterns
+
+
+def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    stack_patterns = _get_stack_patterns()
+
+    if df.empty:
+        for column in ["stack_matches", "primary_stack", "secondary_stack", "stack_domain", "stack_match_count"]:
+            df[column] = pd.Series(dtype="object" if column != "stack_match_count" else "float64")
+        return df
+
+    primary_stacks = []
+    secondary_stacks = []
+    stack_domains = []
+    stack_match_counts = []
+    stack_matches = []
+
+    for _, row in df.iterrows():
+        text = " ".join(
+            [
+                str(row.get("title", "")),
+                str(row.get("description", "")),
+                str(row.get("content", "")),
+                str(row.get("text", "")),
+            ]
+        ).lower()
+
+        matches = []
+        for stack_name, pattern_info in stack_patterns.items():
+            hit_count = sum(1 for pattern in pattern_info["patterns"] if pattern.search(text))
+            if hit_count > 0:
+                matches.append((stack_name, pattern_info["category"], hit_count))
+
+        matches.sort(key=lambda item: (-item[2], item[0]))
+        match_names = [name for name, _, _ in matches]
+        stack_matches.append("|".join(match_names))
+        stack_match_counts.append(float(sum(hit_count for _, _, hit_count in matches)))
+
+        primary_name = match_names[0] if match_names else "Unspecified"
+        secondary_name = match_names[1] if len(match_names) > 1 else ""
+        inferred_domain = matches[0][1] if matches else row.get("tech_category", "Other Tech")
+
+        primary_stacks.append(primary_name)
+        secondary_stacks.append(secondary_name)
+        stack_domains.append(inferred_domain)
+
+    df["stack_matches"] = stack_matches
+    df["primary_stack"] = primary_stacks
+    df["secondary_stack"] = secondary_stacks
+    df["stack_domain"] = stack_domains
+    df["stack_match_count"] = stack_match_counts
+    return df
+
 
 def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -134,7 +219,7 @@ def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
             "top2_score",
         ]:
             df[column] = pd.Series(dtype="object" if "category" in column else "float64")
-        return df
+        return annotate_stack_taxonomy(df)
 
     category_names, category_embeddings = _get_category_embeddings()
 
@@ -169,4 +254,4 @@ def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
     df["top2_category"] = top2_categories
     df["top2_score"] = top2_scores
 
-    return df
+    return annotate_stack_taxonomy(df)
