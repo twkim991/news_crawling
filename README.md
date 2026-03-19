@@ -85,6 +85,7 @@ python src/ssafy_news_pipeline.py \
 - `outputs/tech_source_bias.csv`: source별 카테고리 편향 리포트
 - `outputs/tech_emerging_keywords.csv`: 최근 기간 대비 급상승 키워드
 - `outputs/metadata.json`: 실행 파라미터/입력/행 수/카테고리/stack 분포 메타데이터
+- `outputs/uncertain_articles_all_sources.csv`: 불확실성 기준으로 최종 산출물에서 제외된 기사
 
 ## 참고
 - 아키텍처 효율성 점검 및 개선안: `docs/architecture_review.md`
@@ -95,3 +96,4 @@ python src/ssafy_news_pipeline.py \
 - 기본 구현은 `GDELT raw GKG` 파일을 `masterfilelist.txt`에서 찾아 다운로드하는 방식입니다.
 - 15분 단위 배치 파일을 기간별로 골라 내려받기 때문에, 월/주 단위 트렌드 분석용 백필 데이터 구축에 더 적합합니다.
 - 자세한 비교와 선택 근거는 `docs/gdelt_source_strategy.md`를 참고하세요.
+- 저비용 운영 중심 개선 로드맵: `docs/lean_operating_roadmap.md`
