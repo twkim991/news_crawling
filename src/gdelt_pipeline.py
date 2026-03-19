@@ -1,5 +1,6 @@
 import argparse
 import io
+import json
 import os
 import re
 import zipfile
@@ -13,6 +14,7 @@ from src.common import preprocess_news_df
 
 RAW_DIR = os.path.join("data", "raw")
 PROCESSED_DIR = os.path.join("data", "processed")
+OUTPUT_DIR = "outputs"
 MASTERFILELIST_URL = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
 GKG_SUFFIX = ".gkg.csv.zip"
 DEFAULT_COLUMNS = [
@@ -36,12 +38,18 @@ DEFAULT_TECH_KEYWORDS = [
     "kafka", "spark", "dbt", "github actions", "gitlab ci", "jenkins", "terraform", "ansible", "prometheus", "grafana",
     "github", "gitlab", "jira", "postman", "swagger", "vscode", "intellij",
 ]
+TEXT_DECODE_ATTEMPTS = (
+    ("utf-8", "strict"),
+    ("utf-8", "replace"),
+    ("latin-1", "strict"),
+)
 URL_TOKEN_SPLIT_RE = re.compile(r"[-_/]+")
 NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z가-힣\s]+")
 MULTISPACE_RE = re.compile(r"\s+")
 
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 def _parse_datetime(value: str) -> datetime:
@@ -103,36 +111,93 @@ def list_gkg_file_urls(start_datetime: str, end_datetime: str, max_files: int | 
     return filtered.reset_index(drop=True)
 
 
-def _read_zipped_tsv(content: bytes) -> pd.DataFrame:
+def _parse_tsv_text(decoded_text: str) -> pd.DataFrame:
+    return pd.read_csv(
+        io.StringIO(decoded_text),
+        sep='\t',
+        names=GKG_COLUMNS,
+        dtype=str,
+        keep_default_na=False,
+        on_bad_lines='skip',
+        engine='python',
+    )
+
+
+def _decode_gkg_bytes(raw_bytes: bytes) -> tuple[str, str, str]:
+    last_error = None
+    for encoding, errors in TEXT_DECODE_ATTEMPTS:
+        try:
+            decoded = raw_bytes.decode(encoding, errors=errors)
+            return decoded, encoding, errors
+        except UnicodeDecodeError as exc:
+            last_error = exc
+
+    raise UnicodeDecodeError(
+        getattr(last_error, 'encoding', 'unknown'),
+        getattr(last_error, 'object', raw_bytes),
+        getattr(last_error, 'start', 0),
+        getattr(last_error, 'end', 1),
+        getattr(last_error, 'reason', 'Failed to decode GDELT bytes'),
+    )
+
+
+def _read_zipped_tsv(content: bytes) -> tuple[pd.DataFrame, dict]:
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         members = [name for name in archive.namelist() if name.endswith('.csv')]
         if not members:
             raise ValueError("No CSV file found inside GDELT archive")
         with archive.open(members[0]) as fp:
-            return pd.read_csv(
-                fp,
-                sep='\t',
-                names=GKG_COLUMNS,
-                dtype=str,
-                keep_default_na=False,
-                on_bad_lines='skip',
-            )
+            raw_bytes = fp.read()
+
+    decoded_text, encoding, errors = _decode_gkg_bytes(raw_bytes)
+    frame = _parse_tsv_text(decoded_text)
+    decode_meta = {
+        "archive_member": members[0],
+        "encoding": encoding,
+        "errors": errors,
+        "byte_length": len(raw_bytes),
+    }
+    return frame, decode_meta
 
 
-def download_gkg_files(file_index_df: pd.DataFrame) -> pd.DataFrame:
+def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
     frames: list[pd.DataFrame] = []
+    failures: list[dict] = []
+    fallback_count = 0
+
     for row in file_index_df.itertuples(index=False):
         print(f"[GDELT GKG] download {row.file_timestamp} {row.file_url}")
-        response = requests.get(row.file_url, timeout=120)
-        response.raise_for_status()
-        frame = _read_zipped_tsv(response.content)
-        frame["file_timestamp"] = row.file_timestamp
-        frame["file_url"] = row.file_url
-        frames.append(frame)
+        try:
+            response = requests.get(row.file_url, timeout=120)
+            response.raise_for_status()
+            frame, decode_meta = _read_zipped_tsv(response.content)
+            frame["file_timestamp"] = row.file_timestamp
+            frame["file_url"] = row.file_url
+            frame["decoded_encoding"] = decode_meta["encoding"]
+            frame["decode_errors"] = decode_meta["errors"]
+            frames.append(frame)
+
+            if not (decode_meta["encoding"] == "utf-8" and decode_meta["errors"] == "strict"):
+                fallback_count += 1
+                print(
+                    "[GDELT GKG] decode fallback "
+                    f"encoding={decode_meta['encoding']} errors={decode_meta['errors']} member={decode_meta['archive_member']}"
+                )
+        except Exception as exc:
+            failures.append({
+                "file_timestamp": row.file_timestamp,
+                "file_url": row.file_url,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            })
+            print(f"[GDELT GKG] skip failed file {row.file_timestamp}: {type(exc).__name__}: {exc}")
+
+    print(f"[GDELT GKG] downloaded={len(frames)} failed={len(failures)} decode_fallbacks={fallback_count}")
 
     if not frames:
-        return pd.DataFrame(columns=GKG_COLUMNS + ["file_timestamp", "file_url"])
-    return pd.concat(frames, ignore_index=True)
+        empty_columns = GKG_COLUMNS + ["file_timestamp", "file_url", "decoded_encoding", "decode_errors"]
+        return pd.DataFrame(columns=empty_columns), failures
+    return pd.concat(frames, ignore_index=True), failures
 
 
 def _build_tech_keyword_regex(extra_keywords: list[str] | None = None) -> re.Pattern[str]:
@@ -222,6 +287,14 @@ def normalize_gkg_df(df: pd.DataFrame) -> pd.DataFrame:
     return normalized[DEFAULT_COLUMNS]
 
 
+def _write_failure_report(failures: list[dict], path: str) -> None:
+    folder = os.path.dirname(path)
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fp:
+        json.dump(failures, fp, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download and preprocess raw GDELT GKG files for tech-news trend analysis")
     parser.add_argument("--start-datetime", default="20260301000000", help="UTC start datetime (YYYYMMDD or YYYYMMDDHHMMSS)")
@@ -230,6 +303,7 @@ def main() -> None:
     parser.add_argument("--extra-keywords", nargs="*", default=None, help="extra technology keywords for candidate filtering")
     parser.add_argument("--raw-output", default=os.path.join(RAW_DIR, "gdelt_raw_gkg.csv"), help="raw GKG csv path")
     parser.add_argument("--processed-output", default=os.path.join(PROCESSED_DIR, "gdelt_processed.csv"), help="processed csv path")
+    parser.add_argument("--failure-log", default=os.path.join(OUTPUT_DIR, "gdelt_failed_files.json"), help="json path for failed download/decode records")
     args = parser.parse_args()
 
     print("[1] Build GKG file list")
@@ -237,9 +311,12 @@ def main() -> None:
     print("selected files:", len(file_index_df))
 
     print("[2] Download GKG raw files")
-    raw_df = download_gkg_files(file_index_df)
+    raw_df, failures = download_gkg_files(file_index_df)
     print("raw rows:", len(raw_df))
     raw_df.to_csv(args.raw_output, index=False, encoding="utf-8-sig")
+    _write_failure_report(failures, args.failure_log)
+    print("failed files:", len(failures))
+    print("failure log:", args.failure_log)
 
     print("[3] Filter technology candidates")
     tech_raw_df = filter_tech_gkg_records(raw_df, extra_keywords=args.extra_keywords)
