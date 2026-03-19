@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import pandas as pd
 import requests
 
+from io_utils import ensure_dir
 from settings import GDELT_PROCESSED_PATH, GDELT_RAW_PATH, RAW_DIR, PROCESSED_DIR
 from text_processing import preprocess_news_df
 
@@ -37,8 +38,8 @@ URL_TOKEN_SPLIT_RE = re.compile(r"[-_/]+")
 NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z가-힣\s]+")
 MULTISPACE_RE = re.compile(r"\s+")
 
-os.makedirs(RAW_DIR, exist_ok=True)
-os.makedirs(PROCESSED_DIR, exist_ok=True)
+ensure_dir(RAW_DIR)
+ensure_dir(PROCESSED_DIR)
 
 
 def _parse_datetime(value: str) -> datetime:

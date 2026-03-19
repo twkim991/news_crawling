@@ -46,6 +46,14 @@ python -c "import dotenv, joblib, numpy, pandas, requests, sentence_transformers
 - 예: `AI/ML > OpenAI`, `Cloud & Infrastructure > AWS`, `Frameworks & Libraries > React`
 - 분류 결과에는 `tech_category`와 별도로 `primary_stack`, `secondary_stack`, `stack_matches`가 추가됩니다.
 
+
+## 모듈 구조
+- `src/settings.py`: 경로/모델/기본 threshold 같은 실행 기본값을 관리합니다.
+- `src/text_processing.py`: 스키마 보정, 텍스트 클리닝, 공통 전처리를 담당합니다.
+- `src/embeddings.py`: 임베딩 모델을 lazy-load 하여 import 시 부하를 줄입니다.
+- `src/inference.py`: 세부 카테고리 분류와 stack/entity annotation을 담당합니다.
+- `src/common.py`: 기존 import 경로 호환을 위한 compatibility shim입니다.
+
 ## 핵심 디렉터리
 - `src/`: 파이프라인 소스 코드 (`gdelt_pipeline.py` 포함)
 - `data/raw`: 원천 데이터

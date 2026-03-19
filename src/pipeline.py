@@ -6,7 +6,8 @@ import pandas as pd
 from analytics import build_run_metadata, build_trend_reports, save_run_metadata, save_trend_reports
 from classifier import load_binary_classifier, predict_binary
 from inference import classify_subcategory
-from settings import DEFAULT_BINARY_MODEL_PATH, DEFAULT_TECH_THRESHOLD, DEFAULT_UNCERTAINTY_MARGIN
+from io_utils import ensure_dir
+from settings import DEFAULT_BINARY_MODEL_PATH, DEFAULT_TECH_THRESHOLD, DEFAULT_UNCERTAINTY_MARGIN, PIPELINE_METADATA_PATH, PIPELINE_OUTPUT_DIR
 from text_processing import preprocess_news_df
 from loaders import load_gdelt, load_newsapi, load_ssafy_processed
 
@@ -57,7 +58,7 @@ def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: s
     print("Subcategory classification")
     tech_df = classify_subcategory(tech_df)
 
-    os.makedirs(output_dir, exist_ok=True)
+    ensure_dir(output_dir)
     tech_df.to_csv(
         os.path.join(output_dir, "final_tech_news_all_sources.csv"),
         index=False,
@@ -99,8 +100,8 @@ if __name__ == "__main__":
     parser.add_argument("--ssafy-input", default=None, help="processed SSAFY/final csv path")
     parser.add_argument("--gdelt-input", default=None, help="processed GDELT csv path")
     parser.add_argument("--model", default=DEFAULT_BINARY_MODEL_PATH, help="binary classifier path")
-    parser.add_argument("--output-dir", default="outputs", help="directory for inference outputs")
-    parser.add_argument("--metadata", default="outputs/metadata.json", help="run metadata json path")
+    parser.add_argument("--output-dir", default=PIPELINE_OUTPUT_DIR, help="directory for inference outputs")
+    parser.add_argument("--metadata", default=PIPELINE_METADATA_PATH, help="run metadata json path")
     parser.add_argument("--tech-threshold", type=float, default=DEFAULT_TECH_THRESHOLD, help="binary tech probability threshold")
     parser.add_argument("--uncertainty-margin", type=float, default=DEFAULT_UNCERTAINTY_MARGIN, help="uncertain zone from 0.5")
     args = parser.parse_args()

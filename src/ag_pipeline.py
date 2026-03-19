@@ -7,6 +7,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, f1_score
 
 from embeddings import encode_texts
+from io_utils import ensure_dir
 from settings import AG_TEST_EMB_PATH, AG_TEST_PATH, AG_TRAIN_EMB_PATH, AG_TRAIN_PATH, MODELS_DIR
 from text_processing import preprocess_news_df
 
@@ -16,7 +17,7 @@ TEST_PATH = AG_TEST_PATH
 TRAIN_EMB_PATH = AG_TRAIN_EMB_PATH
 TEST_EMB_PATH = AG_TEST_EMB_PATH
 
-os.makedirs(MODELS_DIR, exist_ok=True)
+ensure_dir(MODELS_DIR)
 
 LABEL_MAP = {
     1: "World",

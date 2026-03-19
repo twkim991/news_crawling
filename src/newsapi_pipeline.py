@@ -1,10 +1,11 @@
 import os
 import time
-import requests
-import pandas as pd
 
+import pandas as pd
+import requests
 from dotenv import load_dotenv
 
+from io_utils import ensure_dir
 from settings import NEWSAPI_PROCESSED_PATH, NEWSAPI_RAW_PATH, RAW_DIR, PROCESSED_DIR
 from text_processing import preprocess_news_df
 
@@ -12,8 +13,8 @@ load_dotenv()
 
 API_KEY = os.getenv("newsapi_key")
 
-os.makedirs(RAW_DIR, exist_ok=True)
-os.makedirs(PROCESSED_DIR, exist_ok=True)
+ensure_dir(RAW_DIR)
+ensure_dir(PROCESSED_DIR)
 
 
 def fetch_newsapi_everything(

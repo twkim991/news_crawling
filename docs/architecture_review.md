@@ -4,7 +4,10 @@
 - `ag_pipeline.py`: AG News(4-class)에서 Sci/Tech vs Non-Tech 이진분류기 학습.
 - `newsapi_pipeline.py`: NewsAPI 수집/정규화/전처리.
 - `pipeline.py`: 운영 데이터(NewsAPI/SSAFY)만 대상으로 이진분류 -> 테크 뉴스 추출 -> 카테고리 분류 -> stack/entity 매칭 -> 트렌드 리포트/메타데이터 생성.
-- `common.py`: 스키마 보정, 전처리, 임베딩 인코딩, 세부 카테고리 분류, stack/entity annotation 로직.
+- `text_processing.py`: 스키마 보정, 텍스트 클리닝, 공통 전처리 로직.
+- `embeddings.py`: 임베딩 모델 로딩/인코딩 로직.
+- `inference.py`: 세부 카테고리 분류와 stack/entity annotation 로직.
+- `common.py`: 기존 모듈 경로 호환용 shim.
 - `taxonomy.py`: 상위 카테고리 + stack/entity alias taxonomy.
 - `analytics.py`: 메타데이터, 점유율, 증감률, source bias, emerging keywords 리포트 생성.
 

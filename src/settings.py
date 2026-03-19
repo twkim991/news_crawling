@@ -20,3 +20,11 @@ AG_TRAIN_PATH = os.path.join(RAW_DIR, "train.csv")
 AG_TEST_PATH = os.path.join(RAW_DIR, "test.csv")
 AG_TRAIN_EMB_PATH = os.path.join(MODELS_DIR, "ag_train_embeddings.npy")
 AG_TEST_EMB_PATH = os.path.join(MODELS_DIR, "ag_test_embeddings.npy")
+
+PIPELINE_OUTPUT_DIR = OUTPUT_DIR
+PIPELINE_METADATA_PATH = os.path.join(OUTPUT_DIR, "metadata.json")
+NEWSAPI_ANALYZED_PATH = os.path.join(OUTPUT_DIR, "newsapi_tech_analyzed.csv")
+GDELT_ANALYZED_PATH = os.path.join(OUTPUT_DIR, "gdelt_tech_analyzed.csv")
+SSAFY_INPUT_PATH = os.path.join(RAW_DIR, "ssafy_dataset_news_2025_1st_half.csv")
+SSAFY_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "final_ssafy_tech_news.csv")
+SSAFY_PROFILE_PATH = os.path.join(OUTPUT_DIR, "ssafy_profile.json")

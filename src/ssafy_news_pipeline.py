@@ -8,7 +8,8 @@ import pandas as pd
 
 from classifier import load_binary_classifier, predict_binary
 from inference import classify_subcategory
-from settings import DEFAULT_BINARY_MODEL_PATH, DEFAULT_TECH_THRESHOLD, DEFAULT_UNCERTAINTY_MARGIN
+from io_utils import ensure_parent_dir
+from settings import DEFAULT_BINARY_MODEL_PATH, DEFAULT_TECH_THRESHOLD, DEFAULT_UNCERTAINTY_MARGIN, SSAFY_INPUT_PATH, SSAFY_OUTPUT_PATH, SSAFY_PROFILE_PATH
 from text_processing import preprocess_news_df
 
 
@@ -123,18 +124,12 @@ def build_profile(df_raw: pd.DataFrame, df_norm: pd.DataFrame, mapped_cols: dict
     return profile
 
 
-def _safe_makedirs_for_file(path: str):
-    folder = os.path.dirname(path)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-
-
 def main():
     parser = argparse.ArgumentParser(description="SSAFY 한국어 뉴스 품질강화 + 분류 파이프라인")
-    parser.add_argument("--input", default="data/raw/ssafy_dataset_news_2025_1st_half.csv", help="raw CSV path")
+    parser.add_argument("--input", default=SSAFY_INPUT_PATH, help="raw CSV path")
     parser.add_argument("--model", default=DEFAULT_BINARY_MODEL_PATH, help="binary classifier path")
-    parser.add_argument("--output", default="outputs/final_ssafy_tech_news.csv", help="final output csv path")
-    parser.add_argument("--profile", default="outputs/ssafy_profile.json", help="schema/profile json path")
+    parser.add_argument("--output", default=SSAFY_OUTPUT_PATH, help="final output csv path")
+    parser.add_argument("--profile", default=SSAFY_PROFILE_PATH, help="schema/profile json path")
     parser.add_argument("--tech-threshold", type=float, default=DEFAULT_TECH_THRESHOLD, help="tech probability threshold")
     parser.add_argument("--uncertainty-margin", type=float, default=DEFAULT_UNCERTAINTY_MARGIN, help="uncertain zone from 0.5")
     args = parser.parse_args()
@@ -192,8 +187,8 @@ def main():
     print("[SSAFY] zero-shot subcategory")
     filtered = classify_subcategory(filtered)
 
-    _safe_makedirs_for_file(args.output)
-    _safe_makedirs_for_file(args.profile)
+    ensure_parent_dir(args.output)
+    ensure_parent_dir(args.profile)
 
     filtered.to_csv(args.output, index=False, encoding="utf-8-sig")
     with open(args.profile, "w", encoding="utf-8") as f:
