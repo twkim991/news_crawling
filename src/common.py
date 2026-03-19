@@ -20,6 +20,11 @@ TRUNCATED_CHARS_RE = re.compile(r"\s*\[\+\d+\s+chars\]\s*$")
 URL_RE = re.compile(r"http\S+|www\.\S+")
 WHITESPACE_RE = re.compile(r"[\r\n\t]+")
 MULTISPACE_RE = re.compile(r"\s+")
+REPRINT_NOISE_RE = re.compile(
+    r"(?:reuters|associated press|ap news|yonhap news|연합뉴스|무단전재|재배포|all rights reserved)",
+    re.IGNORECASE,
+)
+NON_ALNUM_RE = re.compile(r"[^a-z0-9가-힣]+")
 
 REQUIRED_SCHEMA_COLUMNS = ["title", "description", "content", "url", "published_at", "source"]
 
@@ -32,6 +37,7 @@ def clean_text(text: str) -> str:
     cleaned = HTML_TAG_RE.sub(" ", cleaned)
     cleaned = TRUNCATED_CHARS_RE.sub("", cleaned)
     cleaned = URL_RE.sub(" ", cleaned)
+    cleaned = REPRINT_NOISE_RE.sub(" ", cleaned)
     cleaned = WHITESPACE_RE.sub(" ", cleaned)
     return MULTISPACE_RE.sub(" ", cleaned).strip()
 
@@ -43,7 +49,18 @@ def _clean_text_series(series: pd.Series) -> pd.Series:
         .str.replace(HTML_TAG_RE, " ", regex=True)
         .str.replace(TRUNCATED_CHARS_RE, "", regex=True)
         .str.replace(URL_RE, " ", regex=True)
+        .str.replace(REPRINT_NOISE_RE, " ", regex=True)
         .str.replace(WHITESPACE_RE, " ", regex=True)
+        .str.replace(MULTISPACE_RE, " ", regex=True)
+        .str.strip()
+    )
+
+
+def normalize_title_for_dedup(series: pd.Series) -> pd.Series:
+    return (
+        _clean_text_series(series)
+        .str.lower()
+        .str.replace(NON_ALNUM_RE, " ", regex=True)
         .str.replace(MULTISPACE_RE, " ", regex=True)
         .str.strip()
     )
@@ -93,6 +110,7 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
     df["title"] = title_clean
     df["description"] = desc_clean
     df["content"] = content_clean
+    df["normalized_title"] = normalize_title_for_dedup(df["title"])
 
     text_with_content = (title_clean + ". " + title_clean + ". " + desc_clean + ". " + content_clean).str.strip()
     text_without_content = (title_clean + ". " + title_clean + ". " + desc_clean).str.strip()
@@ -105,6 +123,7 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df[df["title"].ne("")]
     df = df[df["text"].str.len() >= 20]
+    df = df[df["normalized_title"].str.len() >= 8]
 
     if "url" in df.columns:
         df["url"] = df["url"].fillna("").astype(str)
@@ -114,7 +133,9 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
             ignore_index=True,
         )
 
-    return df.drop_duplicates(subset=["text"]).reset_index(drop=True)
+    df = df.drop_duplicates(subset=["text"])
+    df = df.drop_duplicates(subset=["normalized_title"])
+    return df.reset_index(drop=True)
 
 
 def encode_texts(texts: Iterable[str], batch_size: int = 64):
