@@ -95,31 +95,23 @@ def ensure_schema(df: pd.DataFrame, *, source_name: str | None = None) -> pd.Dat
 
     return normalized
 
+MAX_CONTENT_CHARS = 700
+MAX_TEXT_CHARS = 2000
+
 
 def build_text(title: str, description: str, content: str = "") -> str:
     title = clean_text(title)
     description = clean_text(description)
-    content = clean_text(content)
+    content = clean_text(content)[:MAX_CONTENT_CHARS]
 
-    if content:
-        text = f"{title}. {title}. {description}. {content}".strip()
-    elif description:
-        text = f"{title}. {title}. {description}".strip()
-    else:
-        text = title.strip()
-
-    return MULTISPACE_RE.sub(" ", text).strip()
+    text = f"{title}. {description}. {content}".strip()
+    return MULTISPACE_RE.sub(" ", text).strip()[:MAX_TEXT_CHARS]
 
 
 def build_text_series(title: pd.Series, description: pd.Series, content: pd.Series) -> pd.Series:
-    text_with_content = (title + ". " + title + ". " + description + ". " + content).str.strip()
-    text_without_content = (title + ". " + title + ". " + description).str.strip()
-    text = np.where(
-        content.str.len() > 0,
-        text_with_content,
-        np.where(description.str.len() > 0, text_without_content, title),
-    )
-    return pd.Series(text, index=title.index).str.replace(MULTISPACE_RE, " ", regex=True).str.strip()
+    content_cut = content.str.slice(0, MAX_CONTENT_CHARS)
+    text = (title + ". " + description + ". " + content_cut).str.strip()
+    return text.str.replace(MULTISPACE_RE, " ", regex=True).str.strip().str.slice(0, MAX_TEXT_CHARS)
 
 
 def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -190,129 +182,293 @@ def _get_stack_patterns():
             compiled.append(pattern)
         patterns[stack_name] = {
             "category": info["category"],
+            "subgroup": info["subgroup"],
             "patterns": tuple(compiled),
         }
     return patterns
 
 
+@lru_cache(maxsize=1)
+def _get_alias_lookup():
+    alias_lookup = {}
+    for stack_name, info in STACK_ALIASES.items():
+        for alias in info["aliases"]:
+            normalized = alias.lower().strip()
+            alias_lookup[normalized] = {
+                "stack": stack_name,
+                "category": info["category"],
+                "subgroup": info["subgroup"],
+            }
+    return alias_lookup
+
+
+@lru_cache(maxsize=1)
+def _get_combined_alias_regex():
+    aliases = sorted(_get_alias_lookup().keys(), key=len, reverse=True)
+    parts = []
+
+    for alias in aliases:
+        escaped = re.escape(alias).replace(r"\ ", r"\s+")
+        if re.fullmatch(r"[a-z0-9\.\+#\-\s]+", alias):
+            parts.append(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])")
+        else:
+            parts.append(escaped)
+
+    return re.compile("|".join(parts), re.IGNORECASE)
+
+
 def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    stack_patterns = _get_stack_patterns()
+
+    result_columns = [
+        "stack_matches",
+        "stack_labels",
+        "stack_categories",
+        "stack_subgroups",
+        "primary_stack",
+        "secondary_stack",
+        "primary_stack_subgroup",
+        "secondary_stack_subgroup",
+        "stack_domain",
+        "stack_match_count",
+        "stack_label_count",
+    ]
 
     if df.empty:
-        for column in [
-            "stack_matches",
-            "stack_labels",
-            "stack_categories",
-            "primary_stack",
-            "secondary_stack",
-            "stack_domain",
-            "stack_match_count",
-            "stack_label_count",
-        ]:
+        for column in result_columns:
             df[column] = pd.Series(dtype="object" if "count" not in column else "float64")
         return df
 
-    primary_stacks = []
-    secondary_stacks = []
-    stack_domains = []
-    stack_match_counts = []
-    stack_matches = []
-    stack_labels = []
-    stack_categories = []
-    stack_label_counts = []
+    def _safe_series(frame: pd.DataFrame, column: str) -> pd.Series:
+        if column in frame.columns:
+            return frame[column].fillna("").astype(str)
+        return pd.Series("", index=frame.index, dtype="object")
 
-    for _, row in df.iterrows():
-        text = " ".join(
-            [
-                str(row.get("title", "")),
-                str(row.get("description", "")),
-                str(row.get("content", "")),
-                str(row.get("text", "")),
-            ]
-        ).lower()
+    alias_lookup = _get_alias_lookup()
+    combined_re = _get_combined_alias_regex()
 
-        matches = []
-        for stack_name, pattern_info in stack_patterns.items():
-            hit_count = sum(1 for pattern in pattern_info["patterns"] if pattern.search(text))
-            if hit_count >= STACK_MIN_HITS:
-                matches.append((stack_name, pattern_info["category"], hit_count))
+    text_series = _safe_series(df, "text").str.strip()
+    fallback_text = (
+        _safe_series(df, "title") + " "
+        + _safe_series(df, "description") + " "
+        + _safe_series(df, "content")
+    ).str.strip()
 
-        matches.sort(key=lambda item: (-item[2], item[0]))
+    analysis_text = text_series.where(text_series.ne(""), fallback_text)
+    analysis_text = analysis_text.str.lower().str.strip()
+
+    df["stack_matches"] = ""
+    df["stack_labels"] = ""
+    df["stack_categories"] = ""
+    df["stack_subgroups"] = ""
+    df["primary_stack"] = "Unspecified"
+    df["secondary_stack"] = ""
+    df["primary_stack_subgroup"] = ""
+    df["secondary_stack_subgroup"] = ""
+    df["stack_domain"] = _safe_series(df, "tech_category").replace("", "Other Tech")
+    df["stack_match_count"] = 0.0
+    df["stack_label_count"] = 0.0
+
+    valid_mask = analysis_text.ne("")
+    if not valid_mask.any():
+        return df
+
+    valid_index = df.index[valid_mask]
+    valid_texts = analysis_text.loc[valid_mask]
+
+    inverse_codes, unique_texts = pd.factorize(valid_texts, sort=False)
+    unique_text_list = unique_texts.tolist()
+
+    unique_results = []
+
+    for text in unique_text_list:
+        hit_counter = {}
+
+        for match in combined_re.finditer(text):
+            alias = match.group(0).lower().strip()
+            info = alias_lookup.get(alias)
+            if info is None:
+                alias_norm = re.sub(r"\s+", " ", alias)
+                info = alias_lookup.get(alias_norm)
+            if info is None:
+                continue
+
+            stack_name = info["stack"]
+            if stack_name not in hit_counter:
+                hit_counter[stack_name] = {
+                    "category": info["category"],
+                    "subgroup": info["subgroup"],
+                    "hit_count": 0,
+                }
+            hit_counter[stack_name]["hit_count"] += 1
+
+        matches = [
+            (stack_name, data["category"], data["subgroup"], data["hit_count"])
+            for stack_name, data in hit_counter.items()
+            if data["hit_count"] >= STACK_MIN_HITS
+        ]
+
+        matches.sort(key=lambda item: (-item[3], item[0]))
         selected_matches = matches[:STACK_MAX_TAGS]
-        match_names = [name for name, _, _ in selected_matches]
-        match_categories = sorted({category for _, category, _ in selected_matches})
 
-        stack_matches.append("|".join(f"{name}:{hit_count}" for name, _, hit_count in selected_matches))
-        stack_labels.append("|".join(match_names))
-        stack_categories.append("|".join(match_categories))
-        stack_match_counts.append(float(sum(hit_count for _, _, hit_count in selected_matches)))
-        stack_label_counts.append(float(len(match_names)))
+        match_names = [name for name, _, _, _ in selected_matches]
+        match_categories = [category for _, category, _, _ in selected_matches]
+        match_subgroups = [subgroup for _, _, subgroup, _ in selected_matches]
 
-        primary_name = match_names[0] if match_names else "Unspecified"
-        secondary_name = match_names[1] if len(match_names) > 1 else ""
-        inferred_domain = match_categories[0] if match_categories else row.get("tech_category", "Other Tech")
+        unique_results.append(
+            {
+                "stack_matches": "|".join(
+                    f"{name}:{hit_count}" for name, _, _, hit_count in selected_matches
+                ),
+                "stack_labels": "|".join(match_names),
+                "stack_categories": "|".join(match_categories),
+                "stack_subgroups": "|".join(match_subgroups),
+                "primary_stack": match_names[0] if match_names else "Unspecified",
+                "secondary_stack": match_names[1] if len(match_names) > 1 else "",
+                "primary_stack_subgroup": match_subgroups[0] if match_subgroups else "",
+                "secondary_stack_subgroup": match_subgroups[1] if len(match_subgroups) > 1 else "",
+                "stack_domain": match_categories[0] if match_categories else "Other Tech",
+                "stack_match_count": float(sum(hit_count for _, _, _, hit_count in selected_matches)),
+                "stack_label_count": float(len(match_names)),
+            }
+        )
 
-        primary_stacks.append(primary_name)
-        secondary_stacks.append(secondary_name)
-        stack_domains.append(inferred_domain)
+    result_df = pd.DataFrame(unique_results)
+    restored = result_df.iloc[inverse_codes].reset_index(drop=True)
 
-    df["stack_matches"] = stack_matches
-    df["stack_labels"] = stack_labels
-    df["stack_categories"] = stack_categories
-    df["primary_stack"] = primary_stacks
-    df["secondary_stack"] = secondary_stacks
-    df["stack_domain"] = stack_domains
-    df["stack_match_count"] = stack_match_counts
-    df["stack_label_count"] = stack_label_counts
+    df.loc[valid_index, "stack_matches"] = restored["stack_matches"].to_numpy()
+    df.loc[valid_index, "stack_labels"] = restored["stack_labels"].to_numpy()
+    df.loc[valid_index, "stack_categories"] = restored["stack_categories"].to_numpy()
+    df.loc[valid_index, "stack_subgroups"] = restored["stack_subgroups"].to_numpy()
+    df.loc[valid_index, "primary_stack"] = restored["primary_stack"].to_numpy()
+    df.loc[valid_index, "secondary_stack"] = restored["secondary_stack"].to_numpy()
+    df.loc[valid_index, "primary_stack_subgroup"] = restored["primary_stack_subgroup"].to_numpy()
+    df.loc[valid_index, "secondary_stack_subgroup"] = restored["secondary_stack_subgroup"].to_numpy()
+    df.loc[valid_index, "stack_domain"] = restored["stack_domain"].to_numpy()
+    df.loc[valid_index, "stack_match_count"] = restored["stack_match_count"].astype(float).to_numpy()
+    df.loc[valid_index, "stack_label_count"] = restored["stack_label_count"].astype(float).to_numpy()
+
     return df
+
+SIMILARITY_CHUNK_SIZE = 4096
 
 
 def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
+    result_columns = [
+        "tech_category",
+        "tech_category_score",
+        "tech_category_score_gap",
+        "top2_category",
+        "top2_score",
+    ]
+
     if df.empty:
-        for column in [
-            "tech_category",
-            "tech_category_score",
-            "tech_category_score_gap",
-            "top2_category",
-            "top2_score",
-        ]:
+        for column in result_columns:
             df[column] = pd.Series(dtype="object" if "category" in column else "float64")
         return annotate_stack_taxonomy(df)
 
+    if "text" not in df.columns:
+        raise KeyError("classify_subcategory requires a 'text' column")
+
+    # text 정리
+    text_series = df["text"].fillna("").astype(str).str.strip()
+
+    # 기본값 먼저 채우기
+    df["tech_category"] = "Other Tech"
+    df["tech_category_score"] = 0.0
+    df["tech_category_score_gap"] = 0.0
+    df["top2_category"] = "Other Tech"
+    df["top2_score"] = 0.0
+
+    # 빈 텍스트는 분류 제외
+    valid_mask = text_series.ne("")
+    if not valid_mask.any():
+        return annotate_stack_taxonomy(df)
+
+    valid_index = df.index[valid_mask]
+    valid_texts = text_series.loc[valid_mask]
+
     category_names, category_embeddings = _get_category_embeddings()
+    category_names = np.asarray(category_names)
 
-    print("[Subcategory] Encode article texts")
-    article_embeddings = encode_texts(df["text"].tolist(), batch_size=64)
+    if len(category_names) == 0:
+        return annotate_stack_taxonomy(df)
 
-    sims = cosine_similarity(article_embeddings, category_embeddings)
-    top_two_indices = np.argpartition(sims, kth=-2, axis=1)[:, -2:]
-    top_two_scores = np.take_along_axis(sims, top_two_indices, axis=1)
-    top_two_order = np.argsort(top_two_scores, axis=1)[:, ::-1]
-    top_two_indices = np.take_along_axis(top_two_indices, top_two_order, axis=1)
+    # 중복 텍스트 제거
+    unique_texts, inverse_indices = pd.factorize(valid_texts, sort=False)
 
-    top1_idx = top_two_indices[:, 0]
-    top2_idx = top_two_indices[:, 1]
-    row_idx = np.arange(len(df))
+    # pd.factorize는 codes, uniques 순서가 아니라 codes first가 아님에 주의
+    # 실제 반환: (codes, uniques)
+    inverse_codes, unique_values = pd.factorize(valid_texts, sort=False)
+    unique_text_list = unique_values.tolist()
 
-    top1_scores = sims[row_idx, top1_idx].astype(float)
-    top2_scores = sims[row_idx, top2_idx].astype(float)
-    score_gaps = top1_scores - top2_scores
+    print("[Subcategory] Encode unique article texts")
+    unique_embeddings = encode_texts(unique_text_list, batch_size=64)
 
-    top1_categories = np.take(category_names, top1_idx)
-    top2_categories = np.take(category_names, top2_idx)
-    final_categories = np.where(
-        (top1_scores < SUBCATEGORY_MIN_SCORE) | (score_gaps < SUBCATEGORY_MIN_GAP),
+    # dtype 축소
+    unique_embeddings = np.asarray(unique_embeddings, dtype=np.float32)
+    category_embeddings = np.asarray(category_embeddings, dtype=np.float32)
+
+    num_unique = len(unique_embeddings)
+    num_categories = len(category_names)
+
+    top1_idx_all = np.empty(num_unique, dtype=np.int32)
+    top2_idx_all = np.empty(num_unique, dtype=np.int32)
+    top1_score_all = np.empty(num_unique, dtype=np.float32)
+    top2_score_all = np.empty(num_unique, dtype=np.float32)
+
+    print("[Subcategory] Similarity calculation")
+    for start in range(0, num_unique, SIMILARITY_CHUNK_SIZE):
+        end = min(start + SIMILARITY_CHUNK_SIZE, num_unique)
+        emb_chunk = unique_embeddings[start:end]
+
+        sims = cosine_similarity(emb_chunk, category_embeddings).astype(np.float32, copy=False)
+
+        if num_categories == 1:
+            local_top1_idx = np.zeros(len(sims), dtype=np.int32)
+            local_top2_idx = np.zeros(len(sims), dtype=np.int32)
+            local_top1_score = sims[:, 0]
+            local_top2_score = np.zeros(len(sims), dtype=np.float32)
+        else:
+            local_top2 = np.argpartition(sims, kth=-2, axis=1)[:, -2:]
+            local_top2_scores = np.take_along_axis(sims, local_top2, axis=1)
+            local_order = np.argsort(local_top2_scores, axis=1)[:, ::-1]
+            local_top2 = np.take_along_axis(local_top2, local_order, axis=1)
+
+            row_idx = np.arange(len(sims))
+            local_top1_idx = local_top2[:, 0]
+            local_top2_idx = local_top2[:, 1]
+            local_top1_score = sims[row_idx, local_top1_idx]
+            local_top2_score = sims[row_idx, local_top2_idx]
+
+        top1_idx_all[start:end] = local_top1_idx
+        top2_idx_all[start:end] = local_top2_idx
+        top1_score_all[start:end] = local_top1_score
+        top2_score_all[start:end] = local_top2_score
+
+    score_gap_all = top1_score_all - top2_score_all
+    top1_category_all = category_names[top1_idx_all]
+    top2_category_all = category_names[top2_idx_all]
+
+    final_category_all = np.where(
+        (top1_score_all < SUBCATEGORY_MIN_SCORE) | (score_gap_all < SUBCATEGORY_MIN_GAP),
         "Other Tech",
-        top1_categories,
+        top1_category_all,
     )
 
-    df["tech_category"] = final_categories
-    df["tech_category_score"] = top1_scores
-    df["tech_category_score_gap"] = score_gaps
-    df["top2_category"] = top2_categories
-    df["top2_score"] = top2_scores
+    # unique 결과를 원래 valid row로 복원
+    restored_top1_category = final_category_all[inverse_codes]
+    restored_top1_score = top1_score_all[inverse_codes]
+    restored_score_gap = score_gap_all[inverse_codes]
+    restored_top2_category = top2_category_all[inverse_codes]
+    restored_top2_score = top2_score_all[inverse_codes]
+
+    df.loc[valid_index, "tech_category"] = restored_top1_category
+    df.loc[valid_index, "tech_category_score"] = restored_top1_score.astype(float)
+    df.loc[valid_index, "tech_category_score_gap"] = restored_score_gap.astype(float)
+    df.loc[valid_index, "top2_category"] = restored_top2_category
+    df.loc[valid_index, "top2_score"] = restored_top2_score.astype(float)
 
     return annotate_stack_taxonomy(df)

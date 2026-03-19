@@ -17,18 +17,68 @@ PROCESSED_DIR = os.path.join("data", "processed")
 OUTPUT_DIR = "outputs"
 MASTERFILELIST_URL = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
 GKG_SUFFIX = ".gkg.csv.zip"
+
+# 최종 processed 스키마도 경량화
 DEFAULT_COLUMNS = [
-    "source", "title", "description", "content", "url", "published_at",
-    "domain", "source_common_name", "document_identifier", "themes", "persons",
-    "organizations", "locations", "tone", "gcam", "file_timestamp", "file_url",
+    "source",
+    "title",
+    "description",
+    "content",
+    "url",
+    "published_at",
+    "domain",
+    "source_common_name",
+    "document_identifier",
+    "themes",
+    "organizations",
+    "tone",
+    "file_timestamp",
 ]
+
+# GDELT GKG 원본 전체 컬럼 정의
 GKG_COLUMNS = [
-    "gkg_record_id", "date", "source_collection_id", "source_common_name", "document_identifier",
-    "counts", "v2_counts", "themes", "enhanced_themes", "locations", "v2_locations", "persons",
-    "v2_persons", "organizations", "v2_organizations", "tone", "enhanced_dates", "gcam",
-    "sharing_image", "related_images", "social_image_embeds", "social_video_embeds", "quotations",
-    "all_names", "amounts", "translation_info", "extras_xml",
+    "gkg_record_id",
+    "date",
+    "source_collection_id",
+    "source_common_name",
+    "document_identifier",
+    "counts",
+    "v2_counts",
+    "themes",
+    "enhanced_themes",
+    "locations",
+    "v2_locations",
+    "persons",
+    "v2_persons",
+    "organizations",
+    "v2_organizations",
+    "tone",
+    "enhanced_dates",
+    "gcam",
+    "sharing_image",
+    "related_images",
+    "social_image_embeds",
+    "social_video_embeds",
+    "quotations",
+    "all_names",
+    "amounts",
+    "translation_info",
+    "extras_xml",
 ]
+
+# 다운로드 직후부터 유지할 최소 컬럼
+KEEP_GKG_COLUMNS = [
+    "gkg_record_id",
+    "date",
+    "source_common_name",
+    "document_identifier",
+    "themes",
+    "enhanced_themes",
+    "organizations",
+    "v2_organizations",
+    "tone",
+]
+
 DEFAULT_TECH_KEYWORDS = [
     "python", "java", "javascript", "typescript", "c++", "c#", "go", "rust", "kotlin", "swift", "dart",
     "react", "vue", "angular", "svelte", "next.js", "spring", "django", "fastapi", "express", "nestjs",
@@ -38,11 +88,13 @@ DEFAULT_TECH_KEYWORDS = [
     "kafka", "spark", "dbt", "github actions", "gitlab ci", "jenkins", "terraform", "ansible", "prometheus", "grafana",
     "github", "gitlab", "jira", "postman", "swagger", "vscode", "intellij",
 ]
+
 TEXT_DECODE_ATTEMPTS = (
     ("utf-8", "strict"),
     ("utf-8", "replace"),
     ("latin-1", "strict"),
 )
+
 URL_TOKEN_SPLIT_RE = re.compile(r"[-_/]+")
 NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z가-힣\s]+")
 MULTISPACE_RE = re.compile(r"\s+")
@@ -75,12 +127,15 @@ def _fetch_masterfile_index() -> pd.DataFrame:
         parts = line.strip().split(" ")
         if len(parts) < 3:
             continue
+
         url = parts[-1]
         if not url.endswith(GKG_SUFFIX):
             continue
+
         timestamp = os.path.basename(url).split(".")[0]
         if len(timestamp) != 14 or not timestamp.isdigit():
             continue
+
         rows.append({
             "file_timestamp": timestamp,
             "size_bytes": int(parts[0]),
@@ -91,12 +146,14 @@ def _fetch_masterfile_index() -> pd.DataFrame:
     index_df = pd.DataFrame(rows)
     if index_df.empty:
         return index_df
+
     return index_df.sort_values("file_timestamp").reset_index(drop=True)
 
 
 def list_gkg_file_urls(start_datetime: str, end_datetime: str, max_files: int | None = None) -> pd.DataFrame:
     start = _parse_datetime(start_datetime)
     end = _parse_datetime(end_datetime)
+
     if start >= end:
         raise ValueError("start_datetime must be earlier than end_datetime")
 
@@ -104,27 +161,34 @@ def list_gkg_file_urls(start_datetime: str, end_datetime: str, max_files: int | 
     if index_df.empty:
         return index_df
 
-    mask = index_df["file_timestamp"].between(start.strftime("%Y%m%d%H%M%S"), end.strftime("%Y%m%d%H%M%S"), inclusive="left")
+    mask = index_df["file_timestamp"].between(
+        start.strftime("%Y%m%d%H%M%S"),
+        end.strftime("%Y%m%d%H%M%S"),
+        inclusive="left",
+    )
     filtered = index_df.loc[mask].copy()
+
     if max_files is not None:
         filtered = filtered.head(max_files)
+
     return filtered.reset_index(drop=True)
 
 
 def _parse_tsv_text(decoded_text: str) -> pd.DataFrame:
     return pd.read_csv(
         io.StringIO(decoded_text),
-        sep='\t',
+        sep="\t",
         names=GKG_COLUMNS,
         dtype=str,
         keep_default_na=False,
-        on_bad_lines='skip',
-        engine='python',
+        on_bad_lines="skip",
+        engine="python",
     )
 
 
 def _decode_gkg_bytes(raw_bytes: bytes) -> tuple[str, str, str]:
     last_error = None
+
     for encoding, errors in TEXT_DECODE_ATTEMPTS:
         try:
             decoded = raw_bytes.decode(encoding, errors=errors)
@@ -133,24 +197,26 @@ def _decode_gkg_bytes(raw_bytes: bytes) -> tuple[str, str, str]:
             last_error = exc
 
     raise UnicodeDecodeError(
-        getattr(last_error, 'encoding', 'unknown'),
-        getattr(last_error, 'object', raw_bytes),
-        getattr(last_error, 'start', 0),
-        getattr(last_error, 'end', 1),
-        getattr(last_error, 'reason', 'Failed to decode GDELT bytes'),
+        getattr(last_error, "encoding", "unknown"),
+        getattr(last_error, "object", raw_bytes),
+        getattr(last_error, "start", 0),
+        getattr(last_error, "end", 1),
+        getattr(last_error, "reason", "Failed to decode GDELT bytes"),
     )
 
 
 def _read_zipped_tsv(content: bytes) -> tuple[pd.DataFrame, dict]:
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
-        members = [name for name in archive.namelist() if name.endswith('.csv')]
+        members = [name for name in archive.namelist() if name.endswith(".csv")]
         if not members:
             raise ValueError("No CSV file found inside GDELT archive")
+
         with archive.open(members[0]) as fp:
             raw_bytes = fp.read()
 
     decoded_text, encoding, errors = _decode_gkg_bytes(raw_bytes)
     frame = _parse_tsv_text(decoded_text)
+
     decode_meta = {
         "archive_member": members[0],
         "encoding": encoding,
@@ -160,6 +226,11 @@ def _read_zipped_tsv(content: bytes) -> tuple[pd.DataFrame, dict]:
     return frame, decode_meta
 
 
+def _shrink_gkg_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    available = [col for col in KEEP_GKG_COLUMNS if col in frame.columns]
+    return frame[available].copy()
+
+
 def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
     frames: list[pd.DataFrame] = []
     failures: list[dict] = []
@@ -167,14 +238,19 @@ def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[
 
     for row in file_index_df.itertuples(index=False):
         print(f"[GDELT GKG] download {row.file_timestamp} {row.file_url}")
+
         try:
             response = requests.get(row.file_url, timeout=120)
             response.raise_for_status()
+
             frame, decode_meta = _read_zipped_tsv(response.content)
+            frame = _shrink_gkg_frame(frame)
+
             frame["file_timestamp"] = row.file_timestamp
             frame["file_url"] = row.file_url
             frame["decoded_encoding"] = decode_meta["encoding"]
             frame["decode_errors"] = decode_meta["errors"]
+
             frames.append(frame)
 
             if not (decode_meta["encoding"] == "utf-8" and decode_meta["errors"] == "strict"):
@@ -183,6 +259,7 @@ def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[
                     "[GDELT GKG] decode fallback "
                     f"encoding={decode_meta['encoding']} errors={decode_meta['errors']} member={decode_meta['archive_member']}"
                 )
+
         except Exception as exc:
             failures.append({
                 "file_timestamp": row.file_timestamp,
@@ -195,8 +272,9 @@ def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[
     print(f"[GDELT GKG] downloaded={len(frames)} failed={len(failures)} decode_fallbacks={fallback_count}")
 
     if not frames:
-        empty_columns = GKG_COLUMNS + ["file_timestamp", "file_url", "decoded_encoding", "decode_errors"]
+        empty_columns = KEEP_GKG_COLUMNS + ["file_timestamp", "file_url", "decoded_encoding", "decode_errors"]
         return pd.DataFrame(columns=empty_columns), failures
+
     return pd.concat(frames, ignore_index=True), failures
 
 
@@ -204,6 +282,7 @@ def _build_tech_keyword_regex(extra_keywords: list[str] | None = None) -> re.Pat
     keywords = list(DEFAULT_TECH_KEYWORDS)
     if extra_keywords:
         keywords.extend([keyword.strip() for keyword in extra_keywords if keyword.strip()])
+
     escaped = sorted({re.escape(keyword.lower()) for keyword in keywords}, key=len, reverse=True)
     return re.compile("|".join(escaped), re.IGNORECASE)
 
@@ -214,20 +293,23 @@ def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None =
 
     tech_re = _build_tech_keyword_regex(extra_keywords)
     working = df.copy()
+
+    # 기술 뉴스 후보 필터는 themes / organizations / url / source 정도로 축소
     signal = (
         _safe_series(working, "enhanced_themes") + " "
         + _safe_series(working, "themes") + " "
         + _safe_series(working, "v2_organizations") + " "
         + _safe_series(working, "organizations") + " "
-        + _safe_series(working, "v2_persons") + " "
-        + _safe_series(working, "persons") + " "
         + _safe_series(working, "document_identifier") + " "
-        + _safe_series(working, "source_common_name") + " "
-        + _safe_series(working, "gcam")
+        + _safe_series(working, "source_common_name")
     )
+
     working["is_tech_candidate"] = signal.str.contains(tech_re, na=False)
     filtered = working.loc[working["is_tech_candidate"]].copy()
-    return filtered.drop_duplicates(subset=["gkg_record_id", "document_identifier", "file_timestamp"])
+
+    return filtered.drop_duplicates(
+        subset=["gkg_record_id", "document_identifier", "file_timestamp"]
+    )
 
 
 def _slug_to_title(url: str) -> str:
@@ -254,35 +336,32 @@ def normalize_gkg_df(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=DEFAULT_COLUMNS)
 
     normalized = pd.DataFrame(index=df.index)
+
     normalized["source"] = "GDELT"
     normalized["url"] = _safe_series(df, "document_identifier")
     normalized["domain"] = normalized["url"].map(lambda url: urlparse(url).netloc.lower())
     normalized["source_common_name"] = _safe_series(df, "source_common_name")
     normalized["document_identifier"] = _safe_series(df, "document_identifier")
-    normalized["themes"] = _normalize_multi_value(_safe_series(df, "enhanced_themes"))
-    normalized["persons"] = _normalize_multi_value(_safe_series(df, "v2_persons"))
-    normalized["organizations"] = _normalize_multi_value(_safe_series(df, "v2_organizations"))
-    normalized["locations"] = _normalize_multi_value(_safe_series(df, "v2_locations"))
+
+    # enhanced 우선, 비면 기본 themes 사용
+    enhanced_themes = _normalize_multi_value(_safe_series(df, "enhanced_themes"))
+    base_themes = _normalize_multi_value(_safe_series(df, "themes"))
+    normalized["themes"] = enhanced_themes.where(enhanced_themes.ne(""), base_themes)
+
+    v2_orgs = _normalize_multi_value(_safe_series(df, "v2_organizations"))
+    base_orgs = _normalize_multi_value(_safe_series(df, "organizations"))
+    normalized["organizations"] = v2_orgs.where(v2_orgs.ne(""), base_orgs)
+
     normalized["tone"] = _safe_series(df, "tone")
-    normalized["gcam"] = _safe_series(df, "gcam")
     normalized["file_timestamp"] = _safe_series(df, "file_timestamp")
-    normalized["file_url"] = _safe_series(df, "file_url")
     normalized["published_at"] = _safe_series(df, "date")
 
     inferred_title = normalized["url"].map(_slug_to_title)
     normalized["title"] = inferred_title.where(inferred_title.ne(""), normalized["source_common_name"])
-    normalized["description"] = (
-        "source=" + normalized["source_common_name"]
-        + "; domain=" + normalized["domain"]
-        + "; themes=" + normalized["themes"]
-    )
-    normalized["content"] = (
-        "organizations=" + normalized["organizations"]
-        + "; persons=" + normalized["persons"]
-        + "; locations=" + normalized["locations"]
-        + "; tone=" + normalized["tone"]
-        + "; gcam=" + normalized["gcam"]
-    )
+
+    # description / content를 짧게 유지
+    normalized["description"] = normalized["themes"]
+    normalized["content"] = normalized["organizations"]
 
     return normalized[DEFAULT_COLUMNS]
 
@@ -291,12 +370,15 @@ def _write_failure_report(failures: list[dict], path: str) -> None:
     folder = os.path.dirname(path)
     if folder:
         os.makedirs(folder, exist_ok=True)
+
     with open(path, "w", encoding="utf-8") as fp:
         json.dump(failures, fp, ensure_ascii=False, indent=2)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download and preprocess raw GDELT GKG files for tech-news trend analysis")
+    parser = argparse.ArgumentParser(
+        description="Download and preprocess raw GDELT GKG files for tech-news trend analysis"
+    )
     parser.add_argument("--start-datetime", default="20260301000000", help="UTC start datetime (YYYYMMDD or YYYYMMDDHHMMSS)")
     parser.add_argument("--end-datetime", default="20260302000000", help="UTC end datetime (YYYYMMDD or YYYYMMDDHHMMSS)")
     parser.add_argument("--max-files", type=int, default=96, help="maximum number of 15-minute GKG files to download")
@@ -307,14 +389,21 @@ def main() -> None:
     args = parser.parse_args()
 
     print("[1] Build GKG file list")
-    file_index_df = list_gkg_file_urls(args.start_datetime, args.end_datetime, max_files=args.max_files)
+    file_index_df = list_gkg_file_urls(
+        args.start_datetime,
+        args.end_datetime,
+        max_files=args.max_files,
+    )
     print("selected files:", len(file_index_df))
 
     print("[2] Download GKG raw files")
     raw_df, failures = download_gkg_files(file_index_df)
     print("raw rows:", len(raw_df))
+    print("raw columns:", list(raw_df.columns))
+
     raw_df.to_csv(args.raw_output, index=False, encoding="utf-8-sig")
     _write_failure_report(failures, args.failure_log)
+
     print("failed files:", len(failures))
     print("failure log:", args.failure_log)
 
@@ -324,6 +413,8 @@ def main() -> None:
 
     print("[4] Normalize schema")
     normalized = normalize_gkg_df(tech_raw_df)
+    print("normalized rows:", len(normalized))
+    print("normalized columns:", list(normalized.columns))
 
     print("[5] Preprocess")
     processed = preprocess_news_df(normalized)
