@@ -46,12 +46,18 @@ def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, model_path: s
         uncertainty_margin=uncertainty_margin,
     )
 
+    uncertain_df = df[df["is_uncertain"]].copy()
     tech_df = df[(df["tech_pred"] == 1) & (~df["is_uncertain"])].copy()
 
     print("Subcategory classification")
     tech_df = classify_subcategory(tech_df)
 
     os.makedirs(output_dir, exist_ok=True)
+    uncertain_df.to_csv(
+        os.path.join(output_dir, "uncertain_articles_all_sources.csv"),
+        index=False,
+        encoding="utf-8-sig",
+    )
     tech_df.to_csv(
         os.path.join(output_dir, "final_tech_news_all_sources.csv"),
         index=False,

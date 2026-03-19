@@ -105,6 +105,23 @@ def _emerging_keywords_report(df: pd.DataFrame, period_freq: str = "W-MON", top_
 
 
 def build_run_metadata(df: pd.DataFrame, tech_df: pd.DataFrame, *, input_sources: list[str], model_path: str, output_dir: str, thresholds: dict) -> dict:
+    uncertain_ratio = float(df["is_uncertain"].mean()) if "is_uncertain" in df and len(df) else 0.0
+    other_tech_ratio = (
+        float((tech_df["tech_category"] == "Other Tech").mean())
+        if "tech_category" in tech_df and len(tech_df)
+        else 0.0
+    )
+    unspecified_stack_ratio = (
+        float((tech_df["primary_stack"] == "Unspecified").mean())
+        if "primary_stack" in tech_df and len(tech_df)
+        else 0.0
+    )
+    published_at_parse_ratio = (
+        float(pd.to_datetime(df["published_at"], errors="coerce", utc=True).notna().mean())
+        if "published_at" in df and len(df)
+        else 0.0
+    )
+
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "input_sources": input_sources,
@@ -120,6 +137,12 @@ def build_run_metadata(df: pd.DataFrame, tech_df: pd.DataFrame, *, input_sources
         "tech_source_distribution": tech_df["source"].astype(str).value_counts().to_dict() if not tech_df.empty else {},
         "tech_category_distribution": tech_df["tech_category"].astype(str).value_counts().to_dict() if "tech_category" in tech_df else {},
         "primary_stack_distribution": tech_df["primary_stack"].astype(str).value_counts().to_dict() if "primary_stack" in tech_df else {},
+        "quality_metrics": {
+            "uncertain_ratio": uncertain_ratio,
+            "other_tech_ratio": other_tech_ratio,
+            "unspecified_stack_ratio": unspecified_stack_ratio,
+            "published_at_parse_ratio": published_at_parse_ratio,
+        },
     }
     return metadata
 
