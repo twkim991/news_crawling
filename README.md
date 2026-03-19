@@ -6,7 +6,7 @@
 
 ---
 
-## 개요
+## <span style = "background-color: #fff5b1">1. 개요</span>
 
 이 프로젝트는 다음 과정을 자동화합니다.
 
@@ -19,7 +19,7 @@
 
 ---
 
-## 전체 파이프라인 흐름
+## <span style = "background-color: #fff5b1">2. 전체 파이프라인 흐름</span>
 
 AG 학습
 → 뉴스 수집 (NewsAPI / GDELT / SSAFY)
@@ -31,7 +31,7 @@ AG 학습
 
 ---
 
-## 프로젝트 구조
+## <span style = "background-color: #fff5b1">3. 프로젝트 구조</span>
 
 ```text
 news_crawling/
@@ -55,7 +55,7 @@ news_crawling/
 
 ```
 
-## 환경 설정
+## <span style = "background-color: #fff5b1">4. 환경 설정</span>
 
 의존성 설치
 
@@ -70,7 +70,7 @@ python -c "import dotenv, joblib, numpy, pandas, requests, sentence_transformers
 
 ```
 
-## Quick Start
+## <span style = "background-color: #fff5b1">5. Quick Start</span>
 
 ```bash
 # 1. 의존성 설치
@@ -97,29 +97,271 @@ python -m src.pipeline \
   --metadata outputs/metadata.json
 ```
 
-## taxonomy 구조
+## <span style = "background-color: #fff5b1">📊 6. Technology Taxonomy</span>
 
-taxonomy는 2단 구조입니다.
-
-- 상위: 기술 카테고리
-- 하위: stack/entity
-
-예시:
-
-AI/ML → OpenAI, PyTorch
-Cloud → AWS, Kubernetes
-Frontend → React
-
-출력 필드:
-
-- tech_category
-- primary_stack
-- secondary_stack
-- stack_matches
+본 프로젝트는 다양한 뉴스 데이터(AG News, NewsAPI, GDELT 등)를 기반으로  
+기술 관련 뉴스를 분류하고, **기술 스택별 트렌드 분석**을 수행합니다.
 
 ---
 
-## 실행 가이드
+### 🎯 설계 기준
+
+- 실제 산업에서 사용되는 기술 스택 기준으로 분류
+- 뉴스 제목/본문만으로도 태깅 가능하도록 단순화
+- 중복 카테고리 제거 (언어 vs 프레임워크)
+- AI/데이터 영역은 별도 축으로 분리
+
+---
+
+### 🧩 Taxonomy Overview
+
+총 8개의 대분류로 구성됩니다.
+
+1. Programming Languages
+2. Frameworks
+3. Data & AI
+4. Databases & Storage
+5. Infrastructure & Cloud
+6. Data Engineering & Messaging
+7. DevOps & CI/CD
+8. Collaboration & Tools (Optional)
+
+---
+
+### 1️⃣ Programming Languages
+
+> 프로그래밍 언어 자체
+
+**Languages**
+
+- Java, Python, JavaScript, TypeScript
+- C++, C#, Go, Rust
+- Kotlin, Swift, Dart
+
+**Optional Tags**
+
+- `#OOP` `#Functional` `#Compiled` `#Interpreted` `#Systems`
+
+---
+
+### 2️⃣ Frameworks
+
+#### 🔹 Backend
+
+- Spring
+- Django
+- FastAPI
+- Express
+- NestJS
+- Ruby on Rails
+
+#### 🔹 Frontend
+
+- React
+- Vue
+- Angular
+- Svelte
+- Next.js
+
+#### 🔹 Mobile
+
+- Flutter
+- React Native
+- iOS SDK
+- Android SDK
+
+---
+
+### 3️⃣ Data & AI
+
+#### 🔹 ML / DL Framework
+
+- PyTorch
+- TensorFlow
+- Scikit-learn
+
+#### 🔹 Data Processing
+
+- Pandas
+- NumPy
+
+#### 🔹 LLM / Generative AI
+
+- OpenAI
+- HuggingFace
+- LangChain
+
+#### 🔹 MLOps
+
+- MLflow
+- Kubeflow
+
+---
+
+### 4️⃣ Databases & Storage
+
+#### 🔹 RDBMS
+
+- PostgreSQL
+- MySQL
+- Oracle
+
+#### 🔹 NoSQL
+
+- MongoDB
+- Cassandra
+- DynamoDB
+
+#### 🔹 Cache / In-Memory
+
+- Redis
+- Memcached
+
+#### 🔹 Search / Index
+
+- Elasticsearch
+- OpenSearch
+
+---
+
+### 5️⃣ Infrastructure & Cloud
+
+#### 🔹 Cloud Providers
+
+- AWS
+- Google Cloud
+- Azure
+- Naver Cloud
+
+#### 🔹 Containers & Orchestration
+
+- Docker
+- Kubernetes
+
+#### 🔹 Serverless / Edge
+
+- AWS Lambda
+- Cloudflare Workers
+
+#### 🔹 CDN / Edge Platform
+
+- Cloudflare
+- Vercel
+
+---
+
+### 6️⃣ Data Engineering & Messaging
+
+#### 🔹 Streaming / Messaging
+
+- Kafka
+- RabbitMQ
+- ActiveMQ
+
+#### 🔹 Big Data Processing
+
+- Spark
+- Flink
+- Hadoop
+
+#### 🔹 Workflow / Orchestration
+
+- Airflow
+- Prefect
+
+---
+
+### 7️⃣ DevOps & CI/CD
+
+#### 🔹 CI/CD
+
+- GitHub Actions
+- GitLab CI
+- Jenkins
+- ArgoCD
+
+#### 🔹 Monitoring / Observability
+
+- Prometheus
+- Grafana
+- Datadog
+
+#### 🔹 Logging
+
+- ELK Stack
+
+#### 🔹 Infrastructure as Code
+
+- Terraform
+- Ansible
+
+---
+
+### 8️⃣ Collaboration & Tools (Optional)
+
+#### 🔹 Version Control
+
+- Git
+- GitHub
+- GitLab
+
+#### 🔹 Project / Documentation
+
+- Jira
+- Confluence
+- Notion
+
+#### 🔹 API Tools
+
+- Swagger (OpenAPI)
+- Postman
+
+---
+
+### 🧠 How It Is Used
+
+뉴스 데이터는 다음 단계로 처리됩니다:
+
+1. 기술 뉴스 여부 필터링
+2. 다중 라벨 분류 (Multi-label classification)
+3. 카테고리별 빈도 집계
+4. 기술 트렌드 분석
+
+---
+
+### 🧪 Example
+
+"OpenAI releases new GPT model on Azure"
+
+→ Data & AI (LLM)
+→ Infrastructure & Cloud (Azure)
+
+---
+
+### ⚠️ Notes
+
+- 하나의 뉴스는 여러 카테고리에 동시에 포함될 수 있음
+- UI 라이브러리 (Redux, Tailwind 등)는 노이즈를 줄이기 위해 제외
+- 과도한 세분화는 모델 성능 저하를 유발할 수 있음
+
+---
+
+### 📦 Example Structure (for code)
+
+```python
+taxonomy = {
+  "languages": [...],
+  "frameworks": {
+    "backend": [...],
+    "frontend": [...],
+    "mobile": [...]
+  },
+  "data_ai": [...],
+}
+
+```
+
+## <span style = "background-color: #fff5b1">7. 실행 가이드</span>
 
 | 목적            | 실행                                    |
 | --------------- | --------------------------------------- |
@@ -131,17 +373,13 @@ Frontend → React
 | SSAFY 처리      | python -m src.ssafy_news_pipeline       |
 | 통합 파이프라인 | python -m src.pipeline                  |
 
----
-
-## 상세 실행 예시
+## <span style = "background-color: #fff5b1">8. 상세 실행 예시</span>
 
 ### AG 학습
 
 ```bash
 python -m src.ag_pipeline
 ```
-
----
 
 ### NewsAPI 수집
 
@@ -225,7 +463,7 @@ python -m src.pipeline \
   --metadata outputs/metadata.json
 ```
 
-## GDELT 수집 메모
+## <span style = "background-color: #fff5b1">9. GDELT 수집 메모</span>
 
 - 15분 단위 GKG 파일 기반
 - 파일 수 많음 → max-files 제한 권장
@@ -234,7 +472,7 @@ python -m src.pipeline \
 
 ---
 
-## 주의사항
+## <span style = "background-color: #fff5b1">10. 주의사항</span>
 
 - GDELT 데이터는 노이즈가 많음
 - NewsAPI는 요청 제한 존재
@@ -243,7 +481,7 @@ python -m src.pipeline \
 
 ---
 
-## 주요 산출물
+## <span style = "background-color: #fff5b1">11. 주요 산출물</span>
 
 models/ag_binary_logreg.joblib
 
@@ -261,13 +499,9 @@ outputs/metadata.json
 
 ---
 
-## 참고 문서
+## <span style = "background-color: #fff5b1">12. 참고 문서</span>
 
 - docs/architecture_review.md
 - docs/refactoring_plan.md
 - docs/gdelt_source_strategy.md
 - docs/lean_operating_roadmap.md
-
-```
-
-```
