@@ -3,10 +3,10 @@ import os
 
 import pandas as pd
 
-from analytics import build_run_metadata, build_trend_reports, save_run_metadata, save_trend_reports
-from classifier import load_binary_classifier, predict_binary
-from common import classify_subcategory, preprocess_news_df
-from loaders import load_gdelt, load_newsapi, load_ssafy_processed
+from src.analytics import build_run_metadata, build_trend_reports, save_run_metadata, save_trend_reports
+from src.classifier import load_binary_classifier, predict_binary
+from src.common import classify_subcategory, preprocess_news_df
+from src.loaders import load_gdelt, load_newsapi, load_ssafy_processed
 
 
 def _load_input_frames(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: str | None) -> tuple[list[pd.DataFrame], list[str]]:

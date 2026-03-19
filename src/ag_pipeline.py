@@ -1,27 +1,29 @@
 import os
+
 import joblib
-import pandas as pd
 import numpy as np
+import pandas as pd
+import torch
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, accuracy_score, f1_score
 
-from common import preprocess_news_df, encode_texts
-
-
-import torch
+from src.common import encode_texts, preprocess_news_df
 
 print(torch.__version__)
 print(torch.cuda.is_available())
-print(torch.cuda.get_device_name(0))
+if torch.cuda.is_available():
+    print(torch.cuda.get_device_name(0))
+else:
+    print("cuda unavailable")
 
 
 
-TRAIN_PATH = r"data\raw\train.csv"
-TEST_PATH = r"data\raw\test.csv"
-MODELS_DIR = r"models"
-TRAIN_EMB_PATH = r"models\ag_train_embeddings.npy"
-TEST_EMB_PATH = r"models\ag_test_embeddings.npy"
+TRAIN_PATH = os.path.join("data", "raw", "train.csv")
+TEST_PATH = os.path.join("data", "raw", "test.csv")
+MODELS_DIR = "models"
+TRAIN_EMB_PATH = os.path.join(MODELS_DIR, "ag_train_embeddings.npy")
+TEST_EMB_PATH = os.path.join(MODELS_DIR, "ag_test_embeddings.npy")
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 

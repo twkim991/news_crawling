@@ -51,15 +51,15 @@ python -c "import dotenv, joblib, numpy, pandas, requests, sentence_transformers
 
 ## 실행 순서 (예시)
 ```bash
-python src/ag_pipeline.py
-python src/newsapi_pipeline.py
-python src/gdelt_pipeline.py \
+python -m src.ag_pipeline
+python -m src.newsapi_pipeline
+python -m src.gdelt_pipeline \
   --start-datetime 20260301000000 \
   --end-datetime 20260302000000 \
   --max-files 96 \
   --processed-output data/processed/gdelt_processed.csv
-python src/gdelt_analysis_pipeline.py
-python src/pipeline.py \
+python -m src.gdelt_analysis_pipeline
+python -m src.pipeline \
   --newsapi-input data/processed/newsapi_processed.csv \
   --gdelt-input data/processed/gdelt_processed.csv \
   --metadata outputs/metadata.json
@@ -67,7 +67,7 @@ python src/pipeline.py \
 
 SSAFY 한국어 뉴스 파일 사용 예시:
 ```bash
-python src/ssafy_news_pipeline.py \
+python -m src.ssafy_news_pipeline \
   --input data/raw/ssafy_dataset_news_2025_1st_half.csv \
   --output outputs/final_ssafy_tech_news.csv \
   --profile outputs/ssafy_profile.json

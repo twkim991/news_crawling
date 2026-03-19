@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import pandas as pd
 import requests
 
-from common import preprocess_news_df
+from src.common import preprocess_news_df
 
 RAW_DIR = os.path.join("data", "raw")
 PROCESSED_DIR = os.path.join("data", "processed")

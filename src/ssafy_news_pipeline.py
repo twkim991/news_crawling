@@ -6,8 +6,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from classifier import load_binary_classifier, predict_binary
-from common import classify_subcategory, preprocess_news_df
+from src.classifier import load_binary_classifier, predict_binary
+from src.common import classify_subcategory, preprocess_news_df
 
 
 COLUMN_CANDIDATES = {
