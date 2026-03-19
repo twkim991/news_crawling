@@ -28,7 +28,27 @@ def _load_input_frames(newsapi_path: str | None, ssafy_path: str | None, gdelt_p
     return frames, sources
 
 
-def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: str | None, model_path: str, output_dir: str, metadata_path: str, proba_threshold: float, uncertainty_margin: float):
+def _build_stack_article_view(tech_df: pd.DataFrame) -> pd.DataFrame:
+    if tech_df.empty or "stack_labels" not in tech_df.columns:
+        return pd.DataFrame(columns=list(tech_df.columns) + ["stack_label"])
+
+    stack_df = tech_df.copy()
+    stack_df["stack_label"] = stack_df["stack_labels"].fillna("").str.split("|")
+    stack_df = stack_df.explode("stack_label")
+    stack_df["stack_label"] = stack_df["stack_label"].fillna("").astype(str).str.strip()
+    return stack_df[stack_df["stack_label"].ne("")].reset_index(drop=True)
+
+
+def run_pipeline(
+    newsapi_path: str | None,
+    ssafy_path: str | None,
+    gdelt_path: str | None,
+    model_path: str,
+    output_dir: str,
+    metadata_path: str,
+    proba_threshold: float,
+    uncertainty_margin: float,
+):
     print("Load datasets")
     frames, input_sources = _load_input_frames(newsapi_path, ssafy_path, gdelt_path)
     if not frames:
@@ -55,6 +75,7 @@ def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: s
 
     print("Subcategory classification")
     tech_df = classify_subcategory(tech_df)
+    stack_article_df = _build_stack_article_view(tech_df)
 
     os.makedirs(output_dir, exist_ok=True)
     uncertain_df.to_csv(
@@ -64,6 +85,11 @@ def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: s
     )
     tech_df.to_csv(
         os.path.join(output_dir, "final_tech_news_all_sources.csv"),
+        index=False,
+        encoding="utf-8-sig",
+    )
+    stack_article_df.to_csv(
+        os.path.join(output_dir, "final_tech_news_by_stack.csv"),
         index=False,
         encoding="utf-8-sig",
     )
@@ -88,10 +114,12 @@ def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: s
         },
     )
     metadata["trend_reports"] = trend_paths
+    metadata["stack_article_output"] = os.path.join(output_dir, "final_tech_news_by_stack.csv")
     save_run_metadata(metadata, metadata_path)
 
     print("Done")
     print(f"all sources output: {os.path.join(output_dir, 'final_tech_news_all_sources.csv')}")
+    print(f"stack article output: {os.path.join(output_dir, 'final_tech_news_by_stack.csv')}")
     print(f"metadata: {metadata_path}")
     for report_name, report_path in trend_paths.items():
         print(f"{report_name}: {report_path}")
