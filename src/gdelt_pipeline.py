@@ -28,11 +28,13 @@ GKG_COLUMNS = [
     "all_names", "amounts", "translation_info", "extras_xml",
 ]
 DEFAULT_TECH_KEYWORDS = [
-    "technology", "software", "developer", "programming", "cloud", "database", "cybersecurity",
-    "semiconductor", "robotics", "artificial intelligence", "machine learning", "generative ai",
-    "llm", "openai", "anthropic", "google cloud", "aws", "azure", "kubernetes", "docker",
-    "python", "java", "typescript", "react", "pytorch", "tensorflow", "github", "oracle",
-    "microsoft", "google", "meta", "nvidia", "tsmc", "chip", "data center",
+    "python", "java", "javascript", "typescript", "c++", "c#", "go", "rust", "kotlin", "swift", "dart",
+    "react", "vue", "angular", "svelte", "next.js", "spring", "django", "fastapi", "express", "nestjs",
+    "pytorch", "tensorflow", "scikit-learn", "pandas", "numpy", "openai", "hugging face", "langchain", "mlflow", "kubeflow",
+    "postgresql", "mysql", "oracle", "mongodb", "cassandra", "dynamodb", "redis", "memcached", "elasticsearch", "opensearch",
+    "aws", "google cloud", "azure", "naver cloud", "docker", "kubernetes",
+    "kafka", "spark", "dbt", "github actions", "gitlab ci", "jenkins", "terraform", "ansible", "prometheus", "grafana",
+    "github", "gitlab", "jira", "postman", "swagger", "vscode", "intellij",
 ]
 URL_TOKEN_SPLIT_RE = re.compile(r"[-_/]+")
 NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z가-힣\s]+")

@@ -19,12 +19,16 @@ def _normalize_datetime(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce", utc=True)
 
 
+def _to_period_string(series: pd.Series, freq: str) -> pd.Series:
+    return series.dt.tz_localize(None).dt.to_period(freq).astype(str)
+
+
 def _share_report(df: pd.DataFrame, group_field: str, period_freq: str, period_name: str) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=["period", group_field, "article_count", "share"])
 
     grouped = (
-        df.assign(period=df["published_at"].dt.to_period(period_freq).astype(str))
+        df.assign(period=_to_period_string(df["published_at"], period_freq))
         .groupby(["period", group_field], as_index=False)
         .size()
         .rename(columns={"size": "article_count"})
@@ -45,17 +49,17 @@ def _growth_report(share_df: pd.DataFrame, entity_field: str) -> pd.DataFrame:
     return ordered
 
 
-def _source_bias_report(df: pd.DataFrame) -> pd.DataFrame:
+def _source_bias_report(df: pd.DataFrame, group_field: str) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["source", "tech_category", "source_share", "global_share", "lift", "article_count"])
+        return pd.DataFrame(columns=["source", group_field, "source_share", "global_share", "lift", "article_count"])
 
-    counts = df.groupby(["source", "tech_category"], as_index=False).size().rename(columns={"size": "article_count"})
+    counts = df.groupby(["source", group_field], as_index=False).size().rename(columns={"size": "article_count"})
     source_totals = counts.groupby("source")["article_count"].transform("sum")
     counts["source_share"] = counts["article_count"] / source_totals
 
-    global_counts = df.groupby("tech_category").size()
+    global_counts = df.groupby(group_field).size()
     global_share = (global_counts / global_counts.sum()).to_dict()
-    counts["global_share"] = counts["tech_category"].map(global_share)
+    counts["global_share"] = counts[group_field].map(global_share)
     counts["lift"] = counts["source_share"] / counts["global_share"]
     return counts.sort_values(["lift", "article_count"], ascending=[False, False])
 
@@ -75,7 +79,7 @@ def _emerging_keywords_report(df: pd.DataFrame, period_freq: str = "W-MON", top_
         return pd.DataFrame(columns=["period", "keyword", "current_count", "previous_count", "delta"])
 
     working = df.copy()
-    working["period"] = working["published_at"].dt.to_period(period_freq).astype(str)
+    working["period"] = _to_period_string(working["published_at"], period_freq)
     periods = sorted(working["period"].dropna().unique())
     if len(periods) < 2:
         return pd.DataFrame(columns=["period", "keyword", "current_count", "previous_count", "delta"])
@@ -104,6 +108,18 @@ def _emerging_keywords_report(df: pd.DataFrame, period_freq: str = "W-MON", top_
     return report.sort_values(["delta", "current_count", "keyword"], ascending=[False, False, True]).head(top_k)
 
 
+def _explode_stack_labels(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "stack_labels" not in df.columns:
+        return pd.DataFrame(columns=list(df.columns) + ["stack_label"])
+
+    working = df.copy()
+    working["stack_labels"] = working["stack_labels"].fillna("")
+    working["stack_label"] = working["stack_labels"].str.split("|")
+    exploded = working.explode("stack_label")
+    exploded["stack_label"] = exploded["stack_label"].fillna("").astype(str).str.strip()
+    return exploded[exploded["stack_label"].ne("")].copy()
+
+
 def build_run_metadata(df: pd.DataFrame, tech_df: pd.DataFrame, *, input_sources: list[str], model_path: str, output_dir: str, thresholds: dict) -> dict:
     uncertain_ratio = float(df["is_uncertain"].mean()) if "is_uncertain" in df and len(df) else 0.0
     other_tech_ratio = (
@@ -114,6 +130,11 @@ def build_run_metadata(df: pd.DataFrame, tech_df: pd.DataFrame, *, input_sources
     unspecified_stack_ratio = (
         float((tech_df["primary_stack"] == "Unspecified").mean())
         if "primary_stack" in tech_df and len(tech_df)
+        else 0.0
+    )
+    multi_stack_ratio = (
+        float((tech_df["stack_label_count"] > 1).mean())
+        if "stack_label_count" in tech_df and len(tech_df)
         else 0.0
     )
     published_at_parse_ratio = (
@@ -141,6 +162,7 @@ def build_run_metadata(df: pd.DataFrame, tech_df: pd.DataFrame, *, input_sources
             "uncertain_ratio": uncertain_ratio,
             "other_tech_ratio": other_tech_ratio,
             "unspecified_stack_ratio": unspecified_stack_ratio,
+            "multi_stack_ratio": multi_stack_ratio,
             "published_at_parse_ratio": published_at_parse_ratio,
         },
     }
@@ -156,39 +178,44 @@ def save_run_metadata(metadata: dict, output_path: str) -> None:
 
 
 def build_trend_reports(tech_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    empty_count = pd.DataFrame(columns=["period", "tech_category", "article_count"])
+    empty_share = pd.DataFrame(columns=["period", "tech_category", "article_count", "share", "period_type"])
+    empty_growth = pd.DataFrame(columns=["period", "tech_category", "article_count", "share", "period_type", "share_delta", "count_delta"])
+    empty_bias = pd.DataFrame(columns=["source", "tech_category", "source_share", "global_share", "lift", "article_count"])
+    empty_keywords = pd.DataFrame(columns=["period", "keyword", "current_count", "previous_count", "delta"])
+    empty_stack_share = pd.DataFrame(columns=["period", "stack_label", "article_count", "share", "period_type"])
+    empty_stack_growth = pd.DataFrame(columns=["period", "stack_label", "article_count", "share", "period_type", "share_delta", "count_delta"])
+    empty_stack_bias = pd.DataFrame(columns=["source", "stack_label", "source_share", "global_share", "lift", "article_count"])
+
     if tech_df.empty or "published_at" not in tech_df.columns:
-        empty_count = pd.DataFrame(columns=["period", "tech_category", "article_count"])
-        empty_share = pd.DataFrame(columns=["period", "tech_category", "article_count", "share", "period_type"])
-        empty_growth = pd.DataFrame(columns=["period", "tech_category", "article_count", "share", "period_type", "share_delta", "count_delta"])
-        empty_bias = pd.DataFrame(columns=["source", "tech_category", "source_share", "global_share", "lift", "article_count"])
-        empty_keywords = pd.DataFrame(columns=["period", "keyword", "current_count", "previous_count", "delta"])
         return {
             "category_weekly_counts": empty_count,
             "category_monthly_counts": empty_count.copy(),
             "category_weekly_share": empty_share,
             "category_monthly_share": empty_share.copy(),
             "category_monthly_growth": empty_growth,
-            "stack_monthly_share": empty_share.rename(columns={"tech_category": "primary_stack"}),
-            "source_bias": empty_bias,
+            "stack_monthly_share": empty_stack_share,
+            "stack_monthly_growth": empty_stack_growth,
+            "source_category_bias": empty_bias,
+            "source_stack_bias": empty_stack_bias,
             "emerging_keywords": empty_keywords,
         }
 
     base = tech_df.copy()
     base["published_at"] = _normalize_datetime(base["published_at"])
     dated = base.dropna(subset=["published_at"]).copy()
-
     if dated.empty:
         return build_trend_reports(pd.DataFrame())
 
     category_weekly_counts = (
-        dated.assign(period=dated["published_at"].dt.to_period("W-MON").astype(str))
+        dated.assign(period=_to_period_string(dated["published_at"], "W-MON"))
         .groupby(["period", "tech_category"], as_index=False)
         .size()
         .rename(columns={"size": "article_count"})
         .sort_values(["period", "article_count", "tech_category"], ascending=[True, False, True])
     )
     category_monthly_counts = (
-        dated.assign(period=dated["published_at"].dt.to_period("M").astype(str))
+        dated.assign(period=_to_period_string(dated["published_at"], "M"))
         .groupby(["period", "tech_category"], as_index=False)
         .size()
         .rename(columns={"size": "article_count"})
@@ -198,8 +225,12 @@ def build_trend_reports(tech_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     category_weekly_share = _share_report(dated, "tech_category", "W-MON", "weekly")
     category_monthly_share = _share_report(dated, "tech_category", "M", "monthly")
     category_monthly_growth = _growth_report(category_monthly_share, "tech_category")
-    stack_monthly_share = _share_report(dated.assign(primary_stack=dated.get("primary_stack", "Unspecified")), "primary_stack", "M", "monthly")
-    source_bias = _source_bias_report(dated)
+
+    stack_base = _explode_stack_labels(dated)
+    stack_monthly_share = _share_report(stack_base, "stack_label", "M", "monthly")
+    stack_monthly_growth = _growth_report(stack_monthly_share, "stack_label")
+    source_category_bias = _source_bias_report(dated, "tech_category")
+    source_stack_bias = _source_bias_report(stack_base, "stack_label")
     emerging_keywords = _emerging_keywords_report(dated)
 
     return {
@@ -209,7 +240,9 @@ def build_trend_reports(tech_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "category_monthly_share": category_monthly_share,
         "category_monthly_growth": category_monthly_growth,
         "stack_monthly_share": stack_monthly_share,
-        "source_bias": source_bias,
+        "stack_monthly_growth": stack_monthly_growth,
+        "source_category_bias": source_category_bias,
+        "source_stack_bias": source_stack_bias,
         "emerging_keywords": emerging_keywords,
     }
 

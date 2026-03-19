@@ -8,7 +8,14 @@ import torch
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from src.taxonomy import STACK_ALIASES, TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_GAP, SUBCATEGORY_MIN_SCORE
+from src.taxonomy import (
+    STACK_ALIASES,
+    STACK_MAX_TAGS,
+    STACK_MIN_HITS,
+    TECH_CATEGORY_DEFS,
+    SUBCATEGORY_MIN_GAP,
+    SUBCATEGORY_MIN_SCORE,
+)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[Model] device: {DEVICE}")
@@ -23,6 +30,7 @@ REPRINT_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 NON_ALNUM_RE = re.compile(r"[^a-z0-9가-힣]+")
+LOW_SIGNAL_TITLE_RE = re.compile(r"(?:video|podcast|newsletter|live updates?)", re.IGNORECASE)
 
 REQUIRED_SCHEMA_COLUMNS = ["title", "description", "content", "url", "published_at", "source"]
 
@@ -126,12 +134,15 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
     df["description"] = desc_clean
     df["content"] = content_clean
     df["normalized_title"] = normalize_title_for_dedup(df["title"])
-
     df["text"] = build_text_series(title_clean, desc_clean, content_clean)
+    df["text_len"] = df["text"].str.len()
+    df["content_ratio"] = np.where(df["text_len"] > 0, df["content"].str.len() / df["text_len"], 0.0)
 
     df = df[df["title"].ne("")]
-    df = df[df["text"].str.len() >= 20]
+    df = df[df["text_len"] >= 30]
     df = df[df["normalized_title"].str.len() >= 8]
+    df = df[~df["title"].str.fullmatch(LOW_SIGNAL_TITLE_RE, na=False)]
+    df = df[df["content_ratio"] <= 0.97]
 
     if "url" in df.columns:
         df["url"] = df["url"].fillna("").astype(str)
@@ -189,8 +200,17 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
     stack_patterns = _get_stack_patterns()
 
     if df.empty:
-        for column in ["stack_matches", "primary_stack", "secondary_stack", "stack_domain", "stack_match_count"]:
-            df[column] = pd.Series(dtype="object" if column != "stack_match_count" else "float64")
+        for column in [
+            "stack_matches",
+            "stack_labels",
+            "stack_categories",
+            "primary_stack",
+            "secondary_stack",
+            "stack_domain",
+            "stack_match_count",
+            "stack_label_count",
+        ]:
+            df[column] = pd.Series(dtype="object" if "count" not in column else "float64")
         return df
 
     primary_stacks = []
@@ -198,6 +218,9 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
     stack_domains = []
     stack_match_counts = []
     stack_matches = []
+    stack_labels = []
+    stack_categories = []
+    stack_label_counts = []
 
     for _, row in df.iterrows():
         text = " ".join(
@@ -212,27 +235,36 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
         matches = []
         for stack_name, pattern_info in stack_patterns.items():
             hit_count = sum(1 for pattern in pattern_info["patterns"] if pattern.search(text))
-            if hit_count > 0:
+            if hit_count >= STACK_MIN_HITS:
                 matches.append((stack_name, pattern_info["category"], hit_count))
 
         matches.sort(key=lambda item: (-item[2], item[0]))
-        match_names = [name for name, _, _ in matches]
-        stack_matches.append("|".join(match_names))
-        stack_match_counts.append(float(sum(hit_count for _, _, hit_count in matches)))
+        selected_matches = matches[:STACK_MAX_TAGS]
+        match_names = [name for name, _, _ in selected_matches]
+        match_categories = sorted({category for _, category, _ in selected_matches})
+
+        stack_matches.append("|".join(f"{name}:{hit_count}" for name, _, hit_count in selected_matches))
+        stack_labels.append("|".join(match_names))
+        stack_categories.append("|".join(match_categories))
+        stack_match_counts.append(float(sum(hit_count for _, _, hit_count in selected_matches)))
+        stack_label_counts.append(float(len(match_names)))
 
         primary_name = match_names[0] if match_names else "Unspecified"
         secondary_name = match_names[1] if len(match_names) > 1 else ""
-        inferred_domain = matches[0][1] if matches else row.get("tech_category", "Other Tech")
+        inferred_domain = match_categories[0] if match_categories else row.get("tech_category", "Other Tech")
 
         primary_stacks.append(primary_name)
         secondary_stacks.append(secondary_name)
         stack_domains.append(inferred_domain)
 
     df["stack_matches"] = stack_matches
+    df["stack_labels"] = stack_labels
+    df["stack_categories"] = stack_categories
     df["primary_stack"] = primary_stacks
     df["secondary_stack"] = secondary_stacks
     df["stack_domain"] = stack_domains
     df["stack_match_count"] = stack_match_counts
+    df["stack_label_count"] = stack_label_counts
     return df
 
 

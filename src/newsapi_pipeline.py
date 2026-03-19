@@ -90,7 +90,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fetch and preprocess NewsAPI articles")
     parser.add_argument(
         "--query",
-        default='(technology OR software OR developer OR programming OR cloud OR database OR "artificial intelligence" OR AI)',
+        default='(python OR java OR javascript OR typescript OR react OR spring OR django OR fastapi OR pytorch OR tensorflow OR openai OR kubernetes OR docker OR aws OR azure OR "google cloud" OR postgresql OR mongodb OR redis OR kafka OR jenkins OR terraform)',
         help="NewsAPI everything query",
     )
     parser.add_argument("--from-date", default="2026-03-01", help="inclusive start date (YYYY-MM-DD)")
