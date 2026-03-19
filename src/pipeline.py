@@ -5,11 +5,13 @@ import pandas as pd
 
 from analytics import build_run_metadata, build_trend_reports, save_run_metadata, save_trend_reports
 from classifier import load_binary_classifier, predict_binary
-from common import classify_subcategory, preprocess_news_df
-from loaders import load_newsapi, load_ssafy_processed
+from inference import classify_subcategory
+from settings import DEFAULT_BINARY_MODEL_PATH, DEFAULT_TECH_THRESHOLD, DEFAULT_UNCERTAINTY_MARGIN
+from text_processing import preprocess_news_df
+from loaders import load_gdelt, load_newsapi, load_ssafy_processed
 
 
-def _load_input_frames(newsapi_path: str | None, ssafy_path: str | None) -> tuple[list[pd.DataFrame], list[str]]:
+def _load_input_frames(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: str | None) -> tuple[list[pd.DataFrame], list[str]]:
     frames = []
     sources = []
 
@@ -21,12 +23,16 @@ def _load_input_frames(newsapi_path: str | None, ssafy_path: str | None) -> tupl
         frames.append(load_ssafy_processed(ssafy_path))
         sources.append(ssafy_path)
 
+    if gdelt_path:
+        frames.append(load_gdelt(gdelt_path))
+        sources.append(gdelt_path)
+
     return frames, sources
 
 
-def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, model_path: str, output_dir: str, metadata_path: str, proba_threshold: float, uncertainty_margin: float):
+def run_pipeline(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: str | None, model_path: str, output_dir: str, metadata_path: str, proba_threshold: float, uncertainty_margin: float):
     print("Load datasets")
-    frames, input_sources = _load_input_frames(newsapi_path, ssafy_path)
+    frames, input_sources = _load_input_frames(newsapi_path, ssafy_path, gdelt_path)
     if not frames:
         raise ValueError("At least one operational dataset must be provided.")
 
@@ -91,16 +97,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Operational news inference + trend report pipeline")
     parser.add_argument("--newsapi-input", default="data/processed/newsapi_processed.csv", help="processed NewsAPI csv path")
     parser.add_argument("--ssafy-input", default=None, help="processed SSAFY/final csv path")
-    parser.add_argument("--model", default="models/ag_binary_logreg.joblib", help="binary classifier path")
+    parser.add_argument("--gdelt-input", default=None, help="processed GDELT csv path")
+    parser.add_argument("--model", default=DEFAULT_BINARY_MODEL_PATH, help="binary classifier path")
     parser.add_argument("--output-dir", default="outputs", help="directory for inference outputs")
     parser.add_argument("--metadata", default="outputs/metadata.json", help="run metadata json path")
-    parser.add_argument("--tech-threshold", type=float, default=0.55, help="binary tech probability threshold")
-    parser.add_argument("--uncertainty-margin", type=float, default=0.08, help="uncertain zone from 0.5")
+    parser.add_argument("--tech-threshold", type=float, default=DEFAULT_TECH_THRESHOLD, help="binary tech probability threshold")
+    parser.add_argument("--uncertainty-margin", type=float, default=DEFAULT_UNCERTAINTY_MARGIN, help="uncertain zone from 0.5")
     args = parser.parse_args()
 
     run_pipeline(
         newsapi_path=args.newsapi_input,
         ssafy_path=args.ssafy_input,
+        gdelt_path=args.gdelt_input,
         model_path=args.model,
         output_dir=args.output_dir,
         metadata_path=args.metadata,

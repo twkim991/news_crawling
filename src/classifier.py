@@ -1,7 +1,7 @@
 import joblib
 import numpy as np
 
-from common import encode_texts
+from embeddings import encode_texts
 
 
 def load_binary_classifier(path):

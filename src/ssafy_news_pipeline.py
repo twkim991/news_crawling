@@ -7,7 +7,9 @@ from datetime import datetime
 import pandas as pd
 
 from classifier import load_binary_classifier, predict_binary
-from common import classify_subcategory, preprocess_news_df
+from inference import classify_subcategory
+from settings import DEFAULT_BINARY_MODEL_PATH, DEFAULT_TECH_THRESHOLD, DEFAULT_UNCERTAINTY_MARGIN
+from text_processing import preprocess_news_df
 
 
 COLUMN_CANDIDATES = {
@@ -130,11 +132,11 @@ def _safe_makedirs_for_file(path: str):
 def main():
     parser = argparse.ArgumentParser(description="SSAFY 한국어 뉴스 품질강화 + 분류 파이프라인")
     parser.add_argument("--input", default="data/raw/ssafy_dataset_news_2025_1st_half.csv", help="raw CSV path")
-    parser.add_argument("--model", default="models/ag_binary_logreg.joblib", help="binary classifier path")
+    parser.add_argument("--model", default=DEFAULT_BINARY_MODEL_PATH, help="binary classifier path")
     parser.add_argument("--output", default="outputs/final_ssafy_tech_news.csv", help="final output csv path")
     parser.add_argument("--profile", default="outputs/ssafy_profile.json", help="schema/profile json path")
-    parser.add_argument("--tech-threshold", type=float, default=0.55, help="tech probability threshold")
-    parser.add_argument("--uncertainty-margin", type=float, default=0.08, help="uncertain zone from 0.5")
+    parser.add_argument("--tech-threshold", type=float, default=DEFAULT_TECH_THRESHOLD, help="tech probability threshold")
+    parser.add_argument("--uncertainty-margin", type=float, default=DEFAULT_UNCERTAINTY_MARGIN, help="uncertain zone from 0.5")
     args = parser.parse_args()
 
     print(f"[SSAFY] load raw: {args.input}")

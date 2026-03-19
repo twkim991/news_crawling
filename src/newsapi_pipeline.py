@@ -4,14 +4,13 @@ import requests
 import pandas as pd
 
 from dotenv import load_dotenv
-from common import preprocess_news_df
+
+from settings import NEWSAPI_PROCESSED_PATH, NEWSAPI_RAW_PATH, RAW_DIR, PROCESSED_DIR
+from text_processing import preprocess_news_df
 
 load_dotenv()
 
 API_KEY = os.getenv("newsapi_key")
-
-RAW_DIR = r"data\raw"
-PROCESSED_DIR = r"data\processed"
 
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
@@ -103,7 +102,7 @@ def main():
     )
     print("raw rows:", len(raw_df))
 
-    raw_path = os.path.join(RAW_DIR, "newsapi_raw.csv")
+    raw_path = NEWSAPI_RAW_PATH
     raw_df.to_csv(raw_path, index=False, encoding="utf-8-sig")
 
     print("[2] Normalize schema")
@@ -113,7 +112,7 @@ def main():
     clean_df = preprocess_news_df(norm_df)
     print("processed rows:", len(clean_df))
 
-    processed_path = os.path.join(PROCESSED_DIR, "newsapi_processed.csv")
+    processed_path = NEWSAPI_PROCESSED_PATH
     clean_df.to_csv(processed_path, index=False, encoding="utf-8-sig")
 
     print("[4] Done")

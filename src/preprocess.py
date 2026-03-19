@@ -1,4 +1,4 @@
-from common import preprocess_news_df
+from text_processing import preprocess_news_df
 
 
 def preprocess_dataframe(df):
