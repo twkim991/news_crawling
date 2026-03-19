@@ -1,5 +1,5 @@
-from functools import lru_cache
 import re
+from functools import lru_cache
 from typing import Iterable
 
 import numpy as np
@@ -8,12 +8,10 @@ import torch
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from taxonomy import STACK_ALIASES, TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_GAP, SUBCATEGORY_MIN_SCORE
+from src.taxonomy import STACK_ALIASES, TECH_CATEGORY_DEFS, SUBCATEGORY_MIN_GAP, SUBCATEGORY_MIN_SCORE
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[Model] device: {DEVICE}")
-
-embed_model = SentenceTransformer("intfloat/multilingual-e5-small", device=DEVICE)
 
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 TRUNCATED_CHARS_RE = re.compile(r"\s*\[\+\d+\s+chars\]\s*$")
@@ -27,6 +25,12 @@ REPRINT_NOISE_RE = re.compile(
 NON_ALNUM_RE = re.compile(r"[^a-z0-9가-힣]+")
 
 REQUIRED_SCHEMA_COLUMNS = ["title", "description", "content", "url", "published_at", "source"]
+
+
+@lru_cache(maxsize=1)
+def get_embed_model() -> SentenceTransformer:
+    print("[Model] load sentence-transformer")
+    return SentenceTransformer("intfloat/multilingual-e5-small", device=DEVICE)
 
 
 def clean_text(text: str) -> str:
@@ -99,6 +103,17 @@ def build_text(title: str, description: str, content: str = "") -> str:
     return MULTISPACE_RE.sub(" ", text).strip()
 
 
+def build_text_series(title: pd.Series, description: pd.Series, content: pd.Series) -> pd.Series:
+    text_with_content = (title + ". " + title + ". " + description + ". " + content).str.strip()
+    text_without_content = (title + ". " + title + ". " + description).str.strip()
+    text = np.where(
+        content.str.len() > 0,
+        text_with_content,
+        np.where(description.str.len() > 0, text_without_content, title),
+    )
+    return pd.Series(text, index=title.index).str.replace(MULTISPACE_RE, " ", regex=True).str.strip()
+
+
 def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
     df = ensure_schema(df)
     df = df.copy()
@@ -112,14 +127,7 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
     df["content"] = content_clean
     df["normalized_title"] = normalize_title_for_dedup(df["title"])
 
-    text_with_content = (title_clean + ". " + title_clean + ". " + desc_clean + ". " + content_clean).str.strip()
-    text_without_content = (title_clean + ". " + title_clean + ". " + desc_clean).str.strip()
-    df["text"] = np.where(
-        content_clean.str.len() > 0,
-        text_with_content,
-        np.where(desc_clean.str.len() > 0, text_without_content, title_clean),
-    )
-    df["text"] = pd.Series(df["text"], index=df.index).str.replace(MULTISPACE_RE, " ", regex=True).str.strip()
+    df["text"] = build_text_series(title_clean, desc_clean, content_clean)
 
     df = df[df["title"].ne("")]
     df = df[df["text"].str.len() >= 20]
@@ -139,7 +147,7 @@ def preprocess_news_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def encode_texts(texts: Iterable[str], batch_size: int = 64):
-    return embed_model.encode(
+    return get_embed_model().encode(
         list(texts),
         batch_size=batch_size,
         show_progress_bar=True,

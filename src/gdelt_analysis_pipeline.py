@@ -2,8 +2,8 @@ import os
 
 import pandas as pd
 
-from analytics import build_trend_reports, save_trend_reports
-from common import classify_subcategory, preprocess_news_df
+from src.analytics import build_trend_reports, save_trend_reports
+from src.common import classify_subcategory, preprocess_news_df
 
 INPUT_PATH = os.path.join("data", "processed", "gdelt_processed.csv")
 OUTPUT_DIR = "outputs"

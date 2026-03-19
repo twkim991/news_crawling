@@ -1,6 +1,6 @@
 import pandas as pd
 
-from common import ensure_schema
+from src.common import build_text_series, ensure_schema
 
 
 LABEL_MAP = {
@@ -35,8 +35,7 @@ def load_newsapi(path):
     df["title"] = df["title"].fillna("")
     df["description"] = df["description"].fillna("")
     df["content"] = df["content"].fillna("")
-
-    df["text"] = df["title"] + ". " + df["description"]
+    df["text"] = build_text_series(df["title"], df["description"], df["content"])
 
     return df
 
@@ -49,7 +48,7 @@ def load_gdelt(path):
     df["description"] = df["description"].fillna("")
     df["content"] = df["content"].fillna("")
 
-    df["text"] = df["title"] + ". " + df["description"] + ". " + df["content"]
+    df["text"] = build_text_series(df["title"], df["description"], df["content"])
 
     return df
 

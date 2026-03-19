@@ -1,17 +1,19 @@
 import os
 import time
-import requests
+
+import argparse
 import pandas as pd
+import requests
 
 from dotenv import load_dotenv
-from common import preprocess_news_df
+from src.common import preprocess_news_df
 
 load_dotenv()
 
 API_KEY = os.getenv("newsapi_key")
 
-RAW_DIR = r"data\raw"
-PROCESSED_DIR = r"data\processed"
+RAW_DIR = os.path.join("data", "raw")
+PROCESSED_DIR = os.path.join("data", "processed")
 
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
@@ -85,26 +87,36 @@ def normalize_newsapi_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def main():
-    query = (
-        '(technology OR software OR developer OR programming OR '
-        'cloud OR database OR "artificial intelligence" OR AI)'
+    parser = argparse.ArgumentParser(description="Fetch and preprocess NewsAPI articles")
+    parser.add_argument(
+        "--query",
+        default='(technology OR software OR developer OR programming OR cloud OR database OR "artificial intelligence" OR AI)',
+        help="NewsAPI everything query",
     )
-    from_date = "2026-03-01"
-    to_date = "2026-03-12"
+    parser.add_argument("--from-date", default="2026-03-01", help="inclusive start date (YYYY-MM-DD)")
+    parser.add_argument("--to-date", default="2026-03-12", help="inclusive end date (YYYY-MM-DD)")
+    parser.add_argument("--language", default="en", help="NewsAPI language filter")
+    parser.add_argument("--page-size", type=int, default=100, help="results per page")
+    parser.add_argument("--max-pages", type=int, default=1, help="maximum pages to fetch")
+    parser.add_argument("--raw-output", default=os.path.join(RAW_DIR, "newsapi_raw.csv"), help="raw output csv path")
+    parser.add_argument("--processed-output", default=os.path.join(PROCESSED_DIR, "newsapi_processed.csv"), help="processed output csv path")
+    args = parser.parse_args()
+
+    if not API_KEY:
+        raise RuntimeError("Missing NewsAPI key. Set `newsapi_key` in the environment or .env file.")
 
     print("[1] Fetch NewsAPI data")
     raw_df = fetch_newsapi_everything(
-        query=query,
-        from_date=from_date,
-        to_date=to_date,
-        language="en",
-        page_size=100,
-        max_pages=1,
+        query=args.query,
+        from_date=args.from_date,
+        to_date=args.to_date,
+        language=args.language,
+        page_size=args.page_size,
+        max_pages=args.max_pages,
     )
     print("raw rows:", len(raw_df))
 
-    raw_path = os.path.join(RAW_DIR, "newsapi_raw.csv")
-    raw_df.to_csv(raw_path, index=False, encoding="utf-8-sig")
+    raw_df.to_csv(args.raw_output, index=False, encoding="utf-8-sig")
 
     print("[2] Normalize schema")
     norm_df = normalize_newsapi_df(raw_df)
@@ -113,12 +125,11 @@ def main():
     clean_df = preprocess_news_df(norm_df)
     print("processed rows:", len(clean_df))
 
-    processed_path = os.path.join(PROCESSED_DIR, "newsapi_processed.csv")
-    clean_df.to_csv(processed_path, index=False, encoding="utf-8-sig")
+    clean_df.to_csv(args.processed_output, index=False, encoding="utf-8-sig")
 
     print("[4] Done")
-    print("saved raw      :", raw_path)
-    print("saved processed:", processed_path)
+    print("saved raw      :", args.raw_output)
+    print("saved processed:", args.processed_output)
 
 
 if __name__ == "__main__":
