@@ -18,7 +18,6 @@ OUTPUT_DIR = "outputs"
 MASTERFILELIST_URL = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
 GKG_SUFFIX = ".gkg.csv.zip"
 
-# 최종 processed 스키마도 경량화
 DEFAULT_COLUMNS = [
     "source",
     "title",
@@ -35,7 +34,6 @@ DEFAULT_COLUMNS = [
     "file_timestamp",
 ]
 
-# GDELT GKG 원본 전체 컬럼 정의
 GKG_COLUMNS = [
     "gkg_record_id",
     "date",
@@ -66,7 +64,6 @@ GKG_COLUMNS = [
     "extras_xml",
 ]
 
-# 다운로드 직후부터 유지할 최소 컬럼
 KEEP_GKG_COLUMNS = [
     "gkg_record_id",
     "date",
@@ -77,6 +74,7 @@ KEEP_GKG_COLUMNS = [
     "organizations",
     "v2_organizations",
     "tone",
+    "extras_xml",
 ]
 
 DEFAULT_TECH_KEYWORDS = [
@@ -98,6 +96,7 @@ TEXT_DECODE_ATTEMPTS = (
 URL_TOKEN_SPLIT_RE = re.compile(r"[-_/]+")
 NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z가-힣\s]+")
 MULTISPACE_RE = re.compile(r"\s+")
+PAGE_TITLE_RE = re.compile(r"<PAGE_TITLE>(.*?)</PAGE_TITLE>", re.IGNORECASE | re.DOTALL)
 
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
@@ -118,13 +117,28 @@ def _safe_series(df: pd.DataFrame, column: str) -> pd.Series:
     return pd.Series("", index=df.index, dtype="object")
 
 
+def _parse_gdelt_published_at(series: pd.Series) -> pd.Series:
+    raw = series.fillna("").astype(str).str.strip()
+    parsed_14 = pd.to_datetime(raw.where(raw.str.len() == 14), format="%Y%m%d%H%M%S", errors="coerce", utc=True)
+    parsed_8 = pd.to_datetime(raw.where(raw.str.len() == 8), format="%Y%m%d", errors="coerce", utc=True)
+    parsed = parsed_14.fillna(parsed_8)
+    return parsed.dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
+
+
+def _safe_domain(url: str) -> str:
+    value = str(url).strip()
+    if not value:
+        return ""
+    return urlparse(value).netloc.lower()
+
+
 def _fetch_masterfile_index() -> pd.DataFrame:
     response = requests.get(MASTERFILELIST_URL, timeout=60)
     response.raise_for_status()
 
     rows = []
     for line in response.text.splitlines():
-        parts = line.strip().split(" ")
+        parts = line.strip().split()
         if len(parts) < 3:
             continue
 
@@ -278,13 +292,22 @@ def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[
     return pd.concat(frames, ignore_index=True), failures
 
 
+def _build_keyword_pattern(keyword: str) -> str:
+    normalized = keyword.lower().strip()
+    escaped = re.escape(normalized).replace(r"\ ", r"\s+")
+    if re.fullmatch(r"[a-z0-9\.\+#\-\s]+", normalized):
+        return rf"(?<![a-z0-9]){escaped}(?![a-z0-9])"
+    return escaped
+
+
 def _build_tech_keyword_regex(extra_keywords: list[str] | None = None) -> re.Pattern[str]:
     keywords = list(DEFAULT_TECH_KEYWORDS)
     if extra_keywords:
         keywords.extend([keyword.strip() for keyword in extra_keywords if keyword.strip()])
 
-    escaped = sorted({re.escape(keyword.lower()) for keyword in keywords}, key=len, reverse=True)
-    return re.compile("|".join(escaped), re.IGNORECASE)
+    unique_keywords = sorted({k.lower().strip() for k in keywords if k.strip()}, key=len, reverse=True)
+    parts = [_build_keyword_pattern(keyword) for keyword in unique_keywords]
+    return re.compile("|".join(parts), re.IGNORECASE)
 
 
 def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None = None) -> pd.DataFrame:
@@ -294,7 +317,6 @@ def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None =
     tech_re = _build_tech_keyword_regex(extra_keywords)
     working = df.copy()
 
-    # 기술 뉴스 후보 필터는 themes / organizations / url / source 정도로 축소
     signal = (
         _safe_series(working, "enhanced_themes") + " "
         + _safe_series(working, "themes") + " "
@@ -307,9 +329,7 @@ def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None =
     working["is_tech_candidate"] = signal.str.contains(tech_re, na=False)
     filtered = working.loc[working["is_tech_candidate"]].copy()
 
-    return filtered.drop_duplicates(
-        subset=["gkg_record_id", "document_identifier", "file_timestamp"]
-    )
+    return filtered.drop_duplicates(subset=["gkg_record_id", "document_identifier", "file_timestamp"])
 
 
 def _slug_to_title(url: str) -> str:
@@ -318,6 +338,21 @@ def _slug_to_title(url: str) -> str:
     path = URL_TOKEN_SPLIT_RE.sub(" ", path)
     path = NON_ALNUM_RE.sub(" ", path)
     return MULTISPACE_RE.sub(" ", path).strip()
+
+
+def _extract_page_title(extras_xml: str) -> str:
+    value = str(extras_xml).strip()
+    if not value:
+        return ""
+
+    match = PAGE_TITLE_RE.search(value)
+    if not match:
+        return ""
+
+    title = match.group(1)
+    title = re.sub(r"<[^>]+>", " ", title)
+    title = MULTISPACE_RE.sub(" ", title).strip()
+    return title
 
 
 def _normalize_multi_value(series: pd.Series) -> pd.Series:
@@ -339,11 +374,10 @@ def normalize_gkg_df(df: pd.DataFrame) -> pd.DataFrame:
 
     normalized["source"] = "GDELT"
     normalized["url"] = _safe_series(df, "document_identifier")
-    normalized["domain"] = normalized["url"].map(lambda url: urlparse(url).netloc.lower())
+    normalized["domain"] = normalized["url"].map(_safe_domain)
     normalized["source_common_name"] = _safe_series(df, "source_common_name")
     normalized["document_identifier"] = _safe_series(df, "document_identifier")
 
-    # enhanced 우선, 비면 기본 themes 사용
     enhanced_themes = _normalize_multi_value(_safe_series(df, "enhanced_themes"))
     base_themes = _normalize_multi_value(_safe_series(df, "themes"))
     normalized["themes"] = enhanced_themes.where(enhanced_themes.ne(""), base_themes)
@@ -354,12 +388,21 @@ def normalize_gkg_df(df: pd.DataFrame) -> pd.DataFrame:
 
     normalized["tone"] = _safe_series(df, "tone")
     normalized["file_timestamp"] = _safe_series(df, "file_timestamp")
-    normalized["published_at"] = _safe_series(df, "date")
+    normalized["published_at"] = _parse_gdelt_published_at(_safe_series(df, "date"))
 
+    page_title = _safe_series(df, "extras_xml").map(_extract_page_title)
     inferred_title = normalized["url"].map(_slug_to_title)
-    normalized["title"] = inferred_title.where(inferred_title.ne(""), normalized["source_common_name"])
+    fallback_title = normalized["source_common_name"].where(
+        normalized["source_common_name"].str.strip().ne(""),
+        normalized["themes"].str.slice(0, 120),
+    )
+    normalized["title"] = page_title.where(
+        page_title.ne(""),
+        inferred_title.where(inferred_title.ne(""), fallback_title),
+    )
 
-    # description / content를 짧게 유지
+    print(normalized[["url", "title"]].head(10).to_dict(orient="records"))
+
     normalized["description"] = normalized["themes"]
     normalized["content"] = normalized["organizations"]
 
@@ -415,6 +458,7 @@ def main() -> None:
     normalized = normalize_gkg_df(tech_raw_df)
     print("normalized rows:", len(normalized))
     print("normalized columns:", list(normalized.columns))
+    print("published_at sample:", normalized["published_at"].head(5).tolist())
 
     print("[5] Preprocess")
     processed = preprocess_news_df(normalized)
