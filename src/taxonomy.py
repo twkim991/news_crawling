@@ -129,6 +129,21 @@ TECH_STACK_TAXONOMY = {
 
 
 STACK_DISAMBIGUATION = {
+    "Python": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "cpython", "pypi", "python package", "python packages",
+            "django", "fastapi", "flask", "pandas", "numpy",
+            "script", "scripting", "interpreter", "jupyter",
+        ],
+        "negative_keywords": [
+            "snake", "snakes", "venom", "venomous", "bite", "bites",
+            "reptile", "reptiles", "serpent", "serpents",
+            "blood", "antivenom", "species", "wildlife", "zoology",
+        ],
+        "supporting_entities": ["python software foundation", "pypi", "cpython"],
+    },
     "Docker": {
         "ambiguous": True,
         "requires_context": True,

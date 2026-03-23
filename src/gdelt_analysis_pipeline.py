@@ -14,7 +14,7 @@ INPUT_PATH = os.path.join("data", "processed", "gdelt_processed.csv")
 OUTPUT_DIR = "outputs"
 BINARY_MODEL_PATH = os.path.join("models", "ag_binary_logreg.joblib")
 BINARY_BATCH_SIZE = 64
-BINARY_THRESHOLD = 0.35
+BINARY_THRESHOLD = 0.45
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -68,6 +68,81 @@ def _build_devtech_regex_from_taxonomy() -> re.Pattern[str]:
     return re.compile("|".join(patterns), re.IGNORECASE)
 
 
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value).strip().lower())
+
+
+def _contains_any(text: str, keywords: list[str] | tuple[str, ...]) -> bool:
+    normalized = _normalize_text(text)
+    for keyword in keywords:
+        if _normalize_text(keyword) in normalized:
+            return True
+    return False
+
+
+def _match_stack_aliases_with_rules(
+    title_text: str,
+    description_text: str,
+    content_text: str,
+) -> list[str]:
+    title_text = _normalize_text(title_text)
+    description_text = _normalize_text(description_text)
+    content_text = _normalize_text(content_text)
+    full_text = f"{title_text} {description_text} {content_text}".strip()
+
+    matched_stacks = []
+
+    for stack_name, info in STACK_ALIASES.items():
+        aliases = info.get("aliases", [])
+        ambiguous = bool(info.get("ambiguous", False))
+        requires_context = bool(info.get("requires_context", False))
+        context_keywords = info.get("context_keywords", ())
+        negative_keywords = info.get("negative_keywords", ())
+        supporting_entities = info.get("supporting_entities", ())
+        vendor_signals = info.get("vendor_signals", ())
+
+        alias_hit = False
+        title_or_desc_hit = False
+
+        for alias in aliases:
+            pattern = _build_keyword_pattern(alias)
+            if re.search(pattern, full_text, flags=re.IGNORECASE):
+                alias_hit = True
+
+            if re.search(pattern, title_text, flags=re.IGNORECASE) or re.search(pattern, description_text, flags=re.IGNORECASE):
+                title_or_desc_hit = True
+
+        if not alias_hit:
+            continue
+
+        # 비모호 스택은 그대로 통과
+        if not ambiguous:
+            matched_stacks.append(stack_name)
+            continue
+
+        # 모호 스택은 negative keyword 있으면 탈락
+        if negative_keywords and _contains_any(full_text, negative_keywords):
+            continue
+
+        # content(organizations 추정)에서만 잡힌 경우는 버림
+        if not title_or_desc_hit:
+            continue
+
+        # requires_context가 있으면 context / supporting / vendor signal 중 하나는 필요
+        if requires_context:
+            has_context = (
+                _contains_any(full_text, context_keywords)
+                or _contains_any(full_text, supporting_entities)
+                or _contains_any(full_text, vendor_signals)
+            )
+            if not has_context:
+                continue
+
+        matched_stacks.append(stack_name)
+
+    return matched_stacks
+
+
 def _extract_matched_stack_aliases(text: str, devtech_re: re.Pattern[str]) -> list[str]:
     value = str(text).strip()
     if not value:
@@ -88,17 +163,23 @@ def _extract_matched_stack_aliases(text: str, devtech_re: re.Pattern[str]) -> li
 
 def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
     working = df.copy()
-    text_signal = _build_text_signal(working)
-    devtech_re = _build_devtech_regex_from_taxonomy()
 
-    working["devtech_text_signal"] = text_signal
-    working["matched_devtech_aliases"] = text_signal.map(
-        lambda text: ", ".join(_extract_matched_stack_aliases(text, devtech_re))
-    )
-    working["is_devtech"] = working["matched_devtech_aliases"].str.strip().ne("").astype(int)
+    title_series = _safe_series(working, "title")
+    description_series = _safe_series(working, "description")
+    content_series = _safe_series(working, "content")
+
+    matched_stack_names = []
+    for title, description, content in zip(title_series, description_series, content_series):
+        stacks = _match_stack_aliases_with_rules(title, description, content)
+        matched_stack_names.append(", ".join(stacks))
+
+    working["devtech_text_signal"] = (
+        title_series + " " + description_series + " " + content_series
+    ).str.strip()
+    working["matched_devtech_aliases"] = matched_stack_names
+    working["is_devtech"] = pd.Series(matched_stack_names).str.strip().ne("").astype(int)
 
     return working
-
 
 def _apply_binary_tech_classifier(
     df: pd.DataFrame,
