@@ -1,3 +1,5 @@
+# gdelt_analysis_pipeline.py
+
 import argparse
 import os
 import re
@@ -47,27 +49,6 @@ def _build_keyword_pattern(keyword: str) -> str:
     return escaped
 
 
-def _get_taxonomy_stack_aliases() -> list[str]:
-    aliases = []
-
-    for stack_name, info in STACK_ALIASES.items():
-        stack_aliases = info.get("aliases", [])
-        aliases.extend(stack_aliases)
-
-    unique_aliases = sorted(
-        {alias.strip().lower() for alias in aliases if str(alias).strip()},
-        key=len,
-        reverse=True,
-    )
-    return unique_aliases
-
-
-def _build_devtech_regex_from_taxonomy() -> re.Pattern[str]:
-    aliases = _get_taxonomy_stack_aliases()
-    patterns = [_build_keyword_pattern(alias) for alias in aliases]
-    return re.compile("|".join(patterns), re.IGNORECASE)
-
-
 def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", str(value).strip().lower())
 
@@ -84,13 +65,14 @@ def _match_stack_aliases_with_rules(
     title_text: str,
     description_text: str,
     content_text: str,
-) -> list[str]:
+) -> tuple[list[str], dict[str, dict[str, str]]]:
     title_text = _normalize_text(title_text)
     description_text = _normalize_text(description_text)
     content_text = _normalize_text(content_text)
     full_text = f"{title_text} {description_text} {content_text}".strip()
 
     matched_stacks = []
+    debug_map = {}
 
     for stack_name, info in STACK_ALIASES.items():
         aliases = info.get("aliases", [])
@@ -106,29 +88,45 @@ def _match_stack_aliases_with_rules(
 
         for alias in aliases:
             pattern = _build_keyword_pattern(alias)
+
             if re.search(pattern, full_text, flags=re.IGNORECASE):
                 alias_hit = True
 
-            if re.search(pattern, title_text, flags=re.IGNORECASE) or re.search(pattern, description_text, flags=re.IGNORECASE):
+            if (
+                re.search(pattern, title_text, flags=re.IGNORECASE)
+                or re.search(pattern, description_text, flags=re.IGNORECASE)
+            ):
                 title_or_desc_hit = True
 
         if not alias_hit:
+            debug_map[stack_name] = {
+                "status": "rejected",
+                "reason": "no_alias_hit",
+            }
             continue
 
-        # 비모호 스택은 그대로 통과
         if not ambiguous:
             matched_stacks.append(stack_name)
+            debug_map[stack_name] = {
+                "status": "accepted",
+                "reason": "non_ambiguous_alias_hit",
+            }
             continue
 
-        # 모호 스택은 negative keyword 있으면 탈락
         if negative_keywords and _contains_any(full_text, negative_keywords):
+            debug_map[stack_name] = {
+                "status": "rejected",
+                "reason": "negative_keyword_hit",
+            }
             continue
 
-        # content(organizations 추정)에서만 잡힌 경우는 버림
         if not title_or_desc_hit:
+            debug_map[stack_name] = {
+                "status": "rejected",
+                "reason": "content_only_hit",
+            }
             continue
 
-        # requires_context가 있으면 context / supporting / vendor signal 중 하나는 필요
         if requires_context:
             has_context = (
                 _contains_any(full_text, context_keywords)
@@ -136,29 +134,19 @@ def _match_stack_aliases_with_rules(
                 or _contains_any(full_text, vendor_signals)
             )
             if not has_context:
+                debug_map[stack_name] = {
+                    "status": "rejected",
+                    "reason": "context_missing",
+                }
                 continue
 
         matched_stacks.append(stack_name)
+        debug_map[stack_name] = {
+            "status": "accepted",
+            "reason": "ambiguous_with_context" if ambiguous else "alias_hit",
+        }
 
-    return matched_stacks
-
-
-def _extract_matched_stack_aliases(text: str, devtech_re: re.Pattern[str]) -> list[str]:
-    value = str(text).strip()
-    if not value:
-        return []
-
-    matches = []
-    seen = set()
-
-    for match in devtech_re.finditer(value):
-        matched = match.group(0).strip()
-        normalized = re.sub(r"\s+", " ", matched.lower())
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            matches.append(normalized)
-
-    return matches
+    return matched_stacks, debug_map
 
 
 def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
@@ -169,15 +157,64 @@ def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
     content_series = _safe_series(working, "content")
 
     matched_stack_names = []
-    for title, description, content in zip(title_series, description_series, content_series):
-        stacks = _match_stack_aliases_with_rules(title, description, content)
+    matched_debug_reasons = []
+    all_rule_logs = []
+    ambiguous_only_flags = []
+    gate_pass_flags = []
+    rescue_applied_flags = []
+
+    for idx, (title, description, content) in enumerate(zip(title_series, description_series, content_series)):
+        stacks, debug_map = _match_stack_aliases_with_rules(title, description, content)
         matched_stack_names.append(", ".join(stacks))
+
+        debug_parts = []
+        all_parts = []
+        ambiguous_only = True if stacks else False
+
+        for stack_name, info in STACK_ALIASES.items():
+            log = debug_map.get(stack_name, {})
+            reason = log.get("reason", "")
+            status = log.get("status", "")
+            if reason:
+                all_parts.append(f"{stack_name}:{status}:{reason}")
+
+        for stack_name in stacks:
+            info = STACK_ALIASES.get(stack_name, {})
+            if not bool(info.get("ambiguous", False)):
+                ambiguous_only = False
+
+            reason = debug_map.get(stack_name, {}).get("reason", "")
+            debug_parts.append(f"{stack_name}:{reason}")
+
+        tech_score = float(working.iloc[idx].get("is_tech_score", 0.0))
+        rescue_applied = 0
+
+        if not stacks:
+            gate_pass = 0
+        elif ambiguous_only:
+            gate_pass = int(tech_score >= 0.50)
+        else:
+            gate_pass = 1
+
+        matched_debug_reasons.append(" | ".join(debug_parts))
+        all_rule_logs.append(" | ".join(all_parts))
+        ambiguous_only_flags.append(int(ambiguous_only))
+        gate_pass_flags.append(gate_pass)
+        rescue_applied_flags.append(rescue_applied)
 
     working["devtech_text_signal"] = (
         title_series + " " + description_series + " " + content_series
     ).str.strip()
     working["matched_devtech_aliases"] = matched_stack_names
-    working["is_devtech"] = pd.Series(matched_stack_names).str.strip().ne("").astype(int)
+    working["matched_devtech_reasons"] = matched_debug_reasons
+    working["all_devtech_rule_logs"] = all_rule_logs
+    working["ambiguous_only_match"] = ambiguous_only_flags
+    working["gate_pass_after_stack_rule"] = gate_pass_flags
+    working["stack_rescue_applied"] = rescue_applied_flags
+    working["is_devtech"] = (
+        pd.Series(matched_stack_names).str.strip().ne("")
+        & (pd.Series(gate_pass_flags).astype(int) == 1)
+    ).astype(int)
 
     return working
 
@@ -245,7 +282,13 @@ def run_gdelt_analysis(
     gated_df = _apply_devtech_keyword_gate(scored_df)
 
     gated_df["final_is_devtech"] = (
-        (gated_df["is_tech"] == 1) & (gated_df["is_devtech"] == 1)
+        (
+            (gated_df["is_tech"] == 1) & (gated_df["is_devtech"] == 1)
+        ) | (
+            (gated_df["is_devtech"] == 1)
+            & (gated_df["ambiguous_only_match"] == 0)
+            & (gated_df["is_tech_score"] >= 0.30)
+        )
     ).astype(int)
 
     binary_output_path = os.path.join(output_dir, f"{output_prefix}_binary_scored.csv")
@@ -288,7 +331,7 @@ def main() -> None:
         output_dir = args.output_dir or OUTPUT_DIR
         output_prefix = args.output_prefix or "gdelt"
 
-    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
     print("[GDELT Analysis] Load processed data")
     print("input_path:", input_path)
@@ -349,13 +392,19 @@ def main() -> None:
     )
 
     gated_df["final_is_devtech"] = (
-        (gated_df["is_tech"] == 1) & (gated_df["is_devtech"] == 1)
+        (
+            (gated_df["is_tech"] == 1) & (gated_df["is_devtech"] == 1)
+        ) | (
+            (gated_df["is_devtech"] == 1)
+            & (gated_df["ambiguous_only_match"] == 0)
+            & (gated_df["is_tech_score"] >= 0.30)
+        )
     ).astype(int)
 
     print("\n[GDELT Analysis] final_is_devtech distribution")
     print(gated_df["final_is_devtech"].value_counts(dropna=False))
 
-    binary_output_path = os.path.join(args.output_dir, f"{args.output_prefix}_binary_scored.csv")
+    binary_output_path = os.path.join(output_dir, f"{output_prefix}_binary_scored.csv")
     print("[GDELT Analysis] Save binary + gate scored csv")
     gated_df.to_csv(binary_output_path, index=False, encoding="utf-8-sig")
 
@@ -377,7 +426,7 @@ def main() -> None:
     else:
         print("\n[GDELT Analysis] 'tech_category' column not found in result")
 
-    output_path = os.path.join(args.output_dir, f"{args.output_prefix}_tech_analyzed.csv")
+    output_path = os.path.join(output_dir, f"{output_prefix}_tech_analyzed.csv")
     print("[GDELT Analysis] Save analyzed csv")
     result_df.to_csv(output_path, index=False, encoding="utf-8-sig")
 
@@ -385,7 +434,7 @@ def main() -> None:
     trend_reports = build_trend_reports(result_df)
 
     print("[GDELT Analysis] Save trend reports")
-    trend_paths = save_trend_reports(trend_reports, args.output_dir, prefix=args.output_prefix)
+    trend_paths = save_trend_reports(trend_reports, output_dir, prefix=output_prefix)
 
     print("\nSaved:", binary_output_path)
     print("Saved:", output_path)

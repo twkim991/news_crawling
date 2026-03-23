@@ -1,3 +1,5 @@
+# taxonomy.py
+
 import re
 
 
@@ -9,7 +11,7 @@ TECH_STACK_TAXONOMY = {
         ),
         "subgroups": {
             "Languages": {
-                "Python": ["python", "cpython", "pypi"],
+                "Python": ["python", "cpython", "pypi", "python 3"],
                 "JavaScript": ["javascript", "ecmascript", "js"],
                 "TypeScript": ["typescript", "tsc", "ts"],
                 "C#": ["c#", "csharp", ".net c#", "dotnet c#"],
@@ -32,7 +34,7 @@ TECH_STACK_TAXONOMY = {
         ),
         "subgroups": {
             "Frontend": {
-                "React": ["react", "reactjs"],
+                "React": ["react", "reactjs", "react.js"],
                 "Angular": ["angular"],
                 "Vue": ["vue", "vue.js"],
                 "Svelte": ["svelte"],
@@ -133,16 +135,49 @@ STACK_DISAMBIGUATION = {
         "ambiguous": True,
         "requires_context": True,
         "context_keywords": [
-            "cpython", "pypi", "python package", "python packages",
-            "django", "fastapi", "flask", "pandas", "numpy",
-            "script", "scripting", "interpreter", "jupyter",
+            "cpython", "pypi", "python 3", "python package", "python packages",
+            "django", "fastapi", "flask", "pandas", "numpy", "scipy",
+            "script", "scripting", "interpreter", "jupyter", "notebook",
+            "pip", "virtualenv", "poetry", "pyproject", "pytest",
+            "machine learning", "data science", "automation",
         ],
         "negative_keywords": [
             "snake", "snakes", "venom", "venomous", "bite", "bites",
             "reptile", "reptiles", "serpent", "serpents",
             "blood", "antivenom", "species", "wildlife", "zoology",
+            "python snake", "python meat", "python skin",
         ],
-        "supporting_entities": ["python software foundation", "pypi", "cpython"],
+        "supporting_entities": ["python software foundation", "pypi", "cpython", "anaconda"],
+    },
+    "React": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "reactjs", "react.js", "react native", "jsx", "tsx",
+            "component", "components", "hook", "hooks",
+            "frontend", "front-end", "ui", "state", "props",
+            "vite", "next.js", "spa", "web app",
+        ],
+        "negative_keywords": [
+            "reacts", "reacted", "reacting", "reaction", "reactions",
+            "reactor", "reactors", "react to", "market reacts",
+            "fans react", "people react", "overreact", "interactive",
+        ],
+        "supporting_entities": ["meta", "reactjs", "react native", "jsx"],
+    },
+    "Rocket": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "rocket.rs", "rocket framework", "rust", "rustlang",
+            "web framework", "crate", "crates.io", "backend", "server",
+        ],
+        "negative_keywords": [
+            "rocket launch", "rocket launches", "rocket attack", "rocket fire",
+            "missile", "missiles", "spacex", "nasa", "orbital", "booster",
+            "spacecraft", "launch vehicle",
+        ],
+        "supporting_entities": ["rocket.rs", "rust foundation", "crates.io"],
     },
     "Docker": {
         "ambiguous": True,
@@ -237,13 +272,24 @@ STACK_DISAMBIGUATION = {
     },
     "Rust": {
         "ambiguous": True,
-        "requires_context": False,
+        "requires_context": True,
         "context_keywords": [
-            "cargo", "rustc", "crate", "crates.io", "borrow checker", "mozilla", "memory safety",
-            "systems programming", "rustlang", "rust-lang",
+            "cargo", "cargo.toml", "cargo.lock",
+            "rustc", "crate", "crates", "crates.io",
+            "borrow checker", "ownership", "lifetimes",
+            "memory safety", "systems programming",
+            "rustlang", "rust-lang", "rust foundation",
+            "mozilla", "ffi", "tokio", "actix", "axum",
+            "wasm", "webassembly"
         ],
-        "negative_keywords": ["corrosion", "oxide", "rust belt", "rusting", "weathered"],
-        "supporting_entities": ["mozilla", "rust foundation", "rustlang", "rust-lang"],
+        "negative_keywords": [
+            "corrosion", "oxide", "oxidation", "rusting", "rusted", "rusty",
+            "weathered", "decay", "metal", "iron", "steel",
+            "rust belt", "auto industry", "car body", "bridge", "pipe"
+        ],
+        "supporting_entities": [
+            "rust foundation", "rustlang", "rust-lang", "mozilla", "crates.io"
+        ],
     },
     "Kafka": {
         "ambiguous": True,
@@ -259,13 +305,15 @@ STACK_DISAMBIGUATION = {
 
 
 STACK_VENDOR_SIGNALS = {
-    "React": ["meta", "jsx", "component", "react native"],
+    "React": ["meta", "jsx", "component", "components", "react native", "frontend"],
     "Docker": ["docker inc", "docker hub", "dockerfile", "container"],
     "Kubernetes": ["cncf", "pod", "cluster", "helm", "kubelet"],
     "PyTorch": ["meta", "tensor", "training", "inference"],
     "Spark": ["apache", "databricks", "pyspark"],
     "Rails": ["ruby", "activerecord", "rubygems"],
     "Express": ["node.js", "middleware", "router"],
+    "Python": ["pypi", "cpython", "python software foundation", "pip"],
+    "Rocket": ["rocket.rs", "crate", "crates.io", "rust"],
 }
 
 
