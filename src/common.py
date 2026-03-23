@@ -12,6 +12,10 @@ from src.taxonomy import (
     STACK_ALIASES,
     STACK_MAX_TAGS,
     STACK_MIN_HITS,
+    STACK_SCORE_THRESHOLD,
+    PRIMARY_STACK_MIN_MARGIN,
+    PRIMARY_STACK_MIN_SCORE,
+    STACK_EVENT_KEYWORDS,
     TECH_CATEGORY_DEFS,
     SUBCATEGORY_MIN_GAP,
     SUBCATEGORY_MIN_SCORE,
@@ -223,6 +227,7 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
     result_columns = [
         "stack_matches",
         "stack_labels",
+        "mentioned_stacks",
         "stack_categories",
         "stack_subgroups",
         "primary_stack",
@@ -232,11 +237,15 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
         "stack_domain",
         "stack_match_count",
         "stack_label_count",
+        "stack_confidences",
+        "primary_stack_score",
+        "primary_stack_margin",
+        "stack_disambiguation_notes",
     ]
 
     if df.empty:
         for column in result_columns:
-            df[column] = pd.Series(dtype="object" if "count" not in column else "float64")
+            df[column] = pd.Series(dtype="object" if "count" not in column and "score" not in column and "margin" not in column else "float64")
         return df
 
     def _safe_series(frame: pd.DataFrame, column: str) -> pd.Series:
@@ -244,21 +253,74 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
             return frame[column].fillna("").astype(str)
         return pd.Series("", index=frame.index, dtype="object")
 
+    def _score_stack_candidate(stack_name: str, info: dict[str, object], hit_count: int, title: str, description: str, content: str, text: str) -> tuple[float, list[str]]:
+        score = float(hit_count)
+        notes: list[str] = []
+        aliases = tuple(str(alias).lower().strip() for alias in info.get("aliases", ()))
+
+        title_hits = sum(title.count(alias) for alias in aliases if alias)
+        description_hits = sum(description.count(alias) for alias in aliases if alias)
+        content_hits = sum(content.count(alias) for alias in aliases if alias)
+
+        score += title_hits * 3.0
+        score += description_hits * 2.0
+        score += content_hits * 1.0
+
+        if title_hits:
+            notes.append("title_match")
+        if description_hits:
+            notes.append("description_match")
+        if content_hits:
+            notes.append("content_match")
+
+        context_keywords = tuple(str(keyword).lower() for keyword in info.get("context_keywords", ()))
+        context_hits = sum(1 for keyword in context_keywords if keyword in text)
+        if context_hits:
+            score += min(context_hits, 3) * 1.5
+            notes.append(f"context:{context_hits}")
+
+        vendor_signals = tuple(str(keyword).lower() for keyword in info.get("supporting_entities", ())) + tuple(str(keyword).lower() for keyword in info.get("vendor_signals", ()))
+        vendor_hits = sum(1 for keyword in vendor_signals if keyword in text)
+        if vendor_hits:
+            score += min(vendor_hits, 2) * 1.5
+            notes.append(f"vendor:{vendor_hits}")
+
+        event_hits = sum(1 for keyword in STACK_EVENT_KEYWORDS if keyword in text)
+        if event_hits:
+            score += min(event_hits, 2) * 0.5
+            notes.append(f"event:{event_hits}")
+
+        negative_keywords = tuple(str(keyword).lower() for keyword in info.get("negative_keywords", ()))
+        negative_hits = sum(1 for keyword in negative_keywords if keyword in text)
+        if negative_hits:
+            score -= min(negative_hits, 3) * 3.0
+            notes.append(f"negative:{negative_hits}")
+
+        requires_context = bool(info.get("requires_context", False))
+        is_ambiguous = bool(info.get("ambiguous", False))
+        has_support = bool(context_hits or vendor_hits)
+        if requires_context and not has_support:
+            score -= 4.0
+            notes.append("missing_context")
+        elif is_ambiguous and not has_support and title_hits == 0 and description_hits == 0:
+            score -= 2.0
+            notes.append("weak_ambiguous_match")
+
+        return score, notes
+
     alias_lookup = _get_alias_lookup()
     combined_re = _get_combined_alias_regex()
 
+    title_series = _safe_series(df, "title").str.lower().str.strip()
+    description_series = _safe_series(df, "description").str.lower().str.strip()
+    content_series = _safe_series(df, "content").str.lower().str.strip()
     text_series = _safe_series(df, "text").str.strip()
-    fallback_text = (
-        _safe_series(df, "title") + " "
-        + _safe_series(df, "description") + " "
-        + _safe_series(df, "content")
-    ).str.strip()
-
-    analysis_text = text_series.where(text_series.ne(""), fallback_text)
-    analysis_text = analysis_text.str.lower().str.strip()
+    fallback_text = (title_series + " " + description_series + " " + content_series).str.strip()
+    analysis_text = text_series.where(text_series.ne(""), fallback_text).str.lower().str.strip()
 
     df["stack_matches"] = ""
     df["stack_labels"] = ""
+    df["mentioned_stacks"] = ""
     df["stack_categories"] = ""
     df["stack_subgroups"] = ""
     df["primary_stack"] = "Unspecified"
@@ -268,23 +330,32 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
     df["stack_domain"] = _safe_series(df, "tech_category").replace("", "Other Tech")
     df["stack_match_count"] = 0.0
     df["stack_label_count"] = 0.0
+    df["stack_confidences"] = ""
+    df["primary_stack_score"] = 0.0
+    df["primary_stack_margin"] = 0.0
+    df["stack_disambiguation_notes"] = ""
 
     valid_mask = analysis_text.ne("")
     if not valid_mask.any():
         return df
 
     valid_index = df.index[valid_mask]
-    valid_texts = analysis_text.loc[valid_mask]
+    unique_frame = pd.DataFrame({
+        "analysis_text": analysis_text.loc[valid_mask],
+        "title": title_series.loc[valid_mask],
+        "description": description_series.loc[valid_mask],
+        "content": content_series.loc[valid_mask],
+    })
 
-    inverse_codes, unique_texts = pd.factorize(valid_texts, sort=False)
-    unique_text_list = unique_texts.tolist()
+    inverse_codes, _ = pd.factorize(unique_frame["analysis_text"], sort=False)
+    unique_frame = unique_frame.drop_duplicates(subset=["analysis_text"]).reset_index(drop=True)
 
     unique_results = []
 
-    for text in unique_text_list:
-        hit_counter = {}
+    for row in unique_frame.itertuples(index=False):
+        hit_counter: dict[str, dict[str, object]] = {}
 
-        for match in combined_re.finditer(text):
+        for match in combined_re.finditer(row.analysis_text):
             alias = match.group(0).lower().strip()
             info = alias_lookup.get(alias)
             if info is None:
@@ -293,60 +364,99 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
             if info is None:
                 continue
 
-            stack_name = info["stack"]
+            stack_name = str(info["stack"])
+            stack_info = STACK_ALIASES.get(stack_name, {})
             if stack_name not in hit_counter:
                 hit_counter[stack_name] = {
                     "category": info["category"],
                     "subgroup": info["subgroup"],
                     "hit_count": 0,
+                    "info": stack_info,
                 }
             hit_counter[stack_name]["hit_count"] += 1
 
-        matches = [
-            (stack_name, data["category"], data["subgroup"], data["hit_count"])
-            for stack_name, data in hit_counter.items()
-            if data["hit_count"] >= STACK_MIN_HITS
-        ]
+        scored_matches = []
+        notes_parts = []
+        for stack_name, data in hit_counter.items():
+            hit_count = int(data["hit_count"])
+            if hit_count < STACK_MIN_HITS:
+                continue
 
-        matches.sort(key=lambda item: (-item[3], item[0]))
-        selected_matches = matches[:STACK_MAX_TAGS]
+            score, notes = _score_stack_candidate(
+                stack_name,
+                data["info"],
+                hit_count,
+                row.title,
+                row.description,
+                row.content,
+                row.analysis_text,
+            )
+            notes_parts.append(f"{stack_name}:{','.join(notes) if notes else 'plain'}")
+            scored_matches.append((stack_name, data["category"], data["subgroup"], hit_count, score))
 
-        match_names = [name for name, _, _, _ in selected_matches]
-        match_categories = [category for _, category, _, _ in selected_matches]
-        match_subgroups = [subgroup for _, _, subgroup, _ in selected_matches]
+        mentioned_matches = sorted(scored_matches, key=lambda item: (-item[4], -item[3], item[0]))
+        selected_matches = [item for item in mentioned_matches if item[4] >= STACK_SCORE_THRESHOLD][:STACK_MAX_TAGS]
 
-        unique_results.append(
-            {
-                "stack_matches": "|".join(
-                    f"{name}:{hit_count}" for name, _, _, hit_count in selected_matches
-                ),
-                "stack_labels": "|".join(match_names),
-                "stack_categories": "|".join(match_categories),
-                "stack_subgroups": "|".join(match_subgroups),
-                "primary_stack": match_names[0] if match_names else "Unspecified",
-                "secondary_stack": match_names[1] if len(match_names) > 1 else "",
-                "primary_stack_subgroup": match_subgroups[0] if match_subgroups else "",
-                "secondary_stack_subgroup": match_subgroups[1] if len(match_subgroups) > 1 else "",
-                "stack_domain": match_categories[0] if match_categories else "Other Tech",
-                "stack_match_count": float(sum(hit_count for _, _, _, hit_count in selected_matches)),
-                "stack_label_count": float(len(match_names)),
-            }
-        )
+        match_names = [name for name, _, _, _, _ in selected_matches]
+        match_categories = [category for _, category, _, _, _ in selected_matches]
+        match_subgroups = [subgroup for _, _, subgroup, _, _ in selected_matches]
+        confidence_parts = [f"{name}:{score:.1f}" for name, _, _, _, score in selected_matches]
+
+        primary_stack = "Unspecified"
+        primary_subgroup = ""
+        secondary_stack = ""
+        secondary_subgroup = ""
+        stack_domain = "Other Tech"
+        primary_score = 0.0
+        primary_margin = 0.0
+
+        if selected_matches:
+            top_name, top_category, top_subgroup, _, top_score = selected_matches[0]
+            next_score = selected_matches[1][4] if len(selected_matches) > 1 else 0.0
+            primary_margin = float(top_score - next_score)
+            if top_score >= PRIMARY_STACK_MIN_SCORE and primary_margin >= PRIMARY_STACK_MIN_MARGIN:
+                primary_stack = top_name
+                primary_subgroup = top_subgroup
+                stack_domain = top_category
+                primary_score = float(top_score)
+            else:
+                stack_domain = top_category
+                primary_score = float(top_score)
+
+            if primary_stack != "Unspecified":
+                remaining = [item for item in selected_matches if item[0] != primary_stack]
+                if remaining:
+                    secondary_stack = remaining[0][0]
+                    secondary_subgroup = remaining[0][2]
+
+        unique_results.append({
+            "stack_matches": "|".join(f"{name}:{hit_count}:{score:.1f}" for name, _, _, hit_count, score in selected_matches),
+            "stack_labels": "|".join(match_names),
+            "mentioned_stacks": "|".join(name for name, *_ in mentioned_matches[:STACK_MAX_TAGS]),
+            "stack_categories": "|".join(match_categories),
+            "stack_subgroups": "|".join(match_subgroups),
+            "primary_stack": primary_stack,
+            "secondary_stack": secondary_stack,
+            "primary_stack_subgroup": primary_subgroup,
+            "secondary_stack_subgroup": secondary_subgroup,
+            "stack_domain": stack_domain,
+            "stack_match_count": float(sum(hit_count for _, _, _, hit_count, _ in selected_matches)),
+            "stack_label_count": float(len(match_names)),
+            "stack_confidences": "|".join(confidence_parts),
+            "primary_stack_score": primary_score,
+            "primary_stack_margin": primary_margin,
+            "stack_disambiguation_notes": "|".join(notes_parts),
+        })
 
     result_df = pd.DataFrame(unique_results)
     restored = result_df.iloc[inverse_codes].reset_index(drop=True)
 
-    df.loc[valid_index, "stack_matches"] = restored["stack_matches"].to_numpy()
-    df.loc[valid_index, "stack_labels"] = restored["stack_labels"].to_numpy()
-    df.loc[valid_index, "stack_categories"] = restored["stack_categories"].to_numpy()
-    df.loc[valid_index, "stack_subgroups"] = restored["stack_subgroups"].to_numpy()
-    df.loc[valid_index, "primary_stack"] = restored["primary_stack"].to_numpy()
-    df.loc[valid_index, "secondary_stack"] = restored["secondary_stack"].to_numpy()
-    df.loc[valid_index, "primary_stack_subgroup"] = restored["primary_stack_subgroup"].to_numpy()
-    df.loc[valid_index, "secondary_stack_subgroup"] = restored["secondary_stack_subgroup"].to_numpy()
-    df.loc[valid_index, "stack_domain"] = restored["stack_domain"].to_numpy()
-    df.loc[valid_index, "stack_match_count"] = restored["stack_match_count"].astype(float).to_numpy()
-    df.loc[valid_index, "stack_label_count"] = restored["stack_label_count"].astype(float).to_numpy()
+    for column in result_columns:
+        values = restored[column]
+        if column in {"stack_match_count", "stack_label_count", "primary_stack_score", "primary_stack_margin"}:
+            df.loc[valid_index, column] = values.astype(float).to_numpy()
+        else:
+            df.loc[valid_index, column] = values.to_numpy()
 
     return df
 
