@@ -9,205 +9,122 @@ TECH_STACK_TAXONOMY = {
         ),
         "subgroups": {
             "Languages": {
-                "Java": ["java", "openjdk", "jdk"],
                 "Python": ["python", "cpython", "pypi"],
-                "JavaScript": ["javascript", "ecmascript"],
-                "TypeScript": ["typescript", "tsc"],
+                "JavaScript": ["javascript", "ecmascript", "js"],
+                "TypeScript": ["typescript", "tsc", "ts"],
+                "C#": ["c#", "csharp", ".net c#", "dotnet c#"],
                 "C++": ["c++", "cpp"],
-                "C#": ["c#", ".net c#", "dotnet c#"],
-                "Go": ["golang", "go language", "go runtime", "go 1."],
-                "Rust": ["rust", "cargo"],
+                "C": [" c language ", " ansi c ", " c programming ", "language c", "c lang"],
+                "Java": ["java", "openjdk", "jdk"],
                 "Kotlin": ["kotlin"],
+                "PHP": ["php"],
                 "Swift": ["swift", "swiftlang"],
-                "Dart": ["dart"],
+                "Rust": ["rust", "cargo"],
+                "Go": ["golang", "go language", "go runtime", "go 1.", "language go"],
+                "Ruby": ["ruby"],
             }
         },
     },
-    "Frameworks": {
+
+    "Frontend Frameworks": {
         "description": (
-            "frontend frameworks, backend frameworks, mobile frameworks, sdk ecosystems, "
-            "프레임워크, 라이브러리, SDK"
+            "frontend frameworks, ui libraries, meta-frameworks, web application frameworks, "
+            "프론트엔드 프레임워크, UI 라이브러리"
+        ),
+        "subgroups": {
+            "Frontend": {
+                "React": ["react", "reactjs"],
+                "Angular": ["angular"],
+                "Vue": ["vue", "vue.js"],
+                "Svelte": ["svelte"],
+                "Next.js": ["next.js", "nextjs"],
+                "Nuxt.js": ["nuxt.js", "nuxtjs", "nuxt"],
+            }
+        },
+    },
+
+    "Backend Frameworks": {
+        "description": (
+            "backend frameworks, web servers, api frameworks, server-side application frameworks, "
+            "백엔드 프레임워크, API 프레임워크, 서버 프레임워크"
         ),
         "subgroups": {
             "Backend": {
-                "Spring": ["spring framework", "spring boot", "spring"],
+                "Node.js": ["node.js", "nodejs", "node js"],
+                "Express": ["express", "express.js", "expressjs"],
                 "Django": ["django"],
                 "FastAPI": ["fastapi"],
-                "Express": ["express.js", "expressjs", "express"],
-                "NestJS": ["nestjs", "nest.js"],
-                "Ruby on Rails": ["ruby on rails", "rails framework", "ror"],
-            },
-            "Frontend": {
-                "React": ["react", "reactjs"],
-                "Vue": ["vue", "vue.js"],
-                "Angular": ["angular"],
-                "Svelte": ["svelte"],
-                "Next.js": ["next.js", "nextjs"],
-            },
-            "Mobile": {
+                "Spring Boot": ["spring boot", "springboot"],
+                "ASP.NET Core": ["asp.net core", "asp net core", "aspnet core"],
+                "Deno": ["deno"],
+                "Laravel": ["laravel"],
+                "Rails": ["ruby on rails", "rails", "rails framework", "ror"],
+                "Flask": ["flask"],
+                "NestJS": ["nestjs", "nest.js", "nest js"],
+                "Axum": ["axum"],
+                "Actix-Web": ["actix-web", "actix web", "actix_web"],
+                "Rocket": ["rocket", "rocket.rs", "rocket framework"],
+                "Bun": ["bun", "bun.sh"],
+                "Prisma": ["prisma", "prisma orm"],
+            }
+        },
+    },
+
+    "Mobile": {
+        "description": (
+            "mobile application frameworks and cross-platform mobile development ecosystems, "
+            "모바일 앱 프레임워크, 크로스플랫폼 개발"
+        ),
+        "subgroups": {
+            "Mobile Frameworks": {
+                "React Native": ["react native", "react-native"],
                 "Flutter": ["flutter"],
-                "React Native": ["react native"],
-                "iOS SDK": ["ios sdk", "apple sdk", "xcode sdk"],
-                "Android SDK": ["android sdk"],
-            },
+            }
         },
     },
-    "Data & AI": {
+
+    "AI / ML": {
         "description": (
-            "machine learning, deep learning, llm platforms, generative ai, mlops, data science tooling, "
-            "인공지능, 머신러닝, 생성형 AI, 데이터 처리, MLOps"
+            "machine learning, deep learning, ai frameworks, model training, data science tooling, "
+            "인공지능, 머신러닝, 딥러닝 프레임워크"
         ),
         "subgroups": {
-            "ML / DL Framework": {
-                "PyTorch": ["pytorch"],
-                "TensorFlow": ["tensorflow", "keras"],
+            "ML / DL Frameworks": {
+                "PyTorch": ["pytorch", "torch"],
+                "TensorFlow": ["tensorflow", "tf", "keras"],
                 "Scikit-learn": ["scikit-learn", "sklearn"],
-            },
-            "Data Analysis / Processing": {
-                "Pandas": ["pandas"],
-                "NumPy": ["numpy"],
-            },
-            "LLM / Generative AI": {
-                "OpenAI": ["openai", "chatgpt", "gpt-4", "gpt-4.1", "gpt-4o", "o1", "o3"],
-                "Hugging Face": ["hugging face", "transformers", "diffusers"],
-                "LangChain": ["langchain", "langgraph"],
-            },
-            "MLOps / Serving": {
-                "MLflow": ["mlflow"],
-                "Kubeflow": ["kubeflow"],
-            },
+            }
         },
     },
-    "Databases & Storage": {
+
+    "Infrastructure & DevOps": {
         "description": (
-            "rdbms, nosql, caching, search indexing, storage engines, "
-            "데이터베이스, 스토리지, 검색 인덱스"
+            "containers, orchestration, deployment infrastructure, cloud-native operations, "
+            "컨테이너, 오케스트레이션, 인프라, 데브옵스"
         ),
         "subgroups": {
-            "RDBMS": {
-                "PostgreSQL": ["postgresql", "postgres"],
-                "MySQL": ["mysql"],
-                "Oracle": ["oracle database", "oracle db", "oracle"],
-            },
-            "NoSQL": {
-                "MongoDB": ["mongodb", "mongo db"],
-                "Cassandra": ["cassandra", "apache cassandra"],
-                "DynamoDB": ["dynamodb", "dynamo db"],
-            },
-            "Cache / In-Memory": {
-                "Redis": ["redis"],
-                "Memcached": ["memcached"],
-            },
-            "Search / Index": {
-                "Elasticsearch": ["elasticsearch", "elastic stack"],
-                "OpenSearch": ["opensearch", "open search"],
-            },
-        },
-    },
-    "Infrastructure & Cloud": {
-        "description": (
-            "cloud providers, containers, orchestration, hosting, compute infrastructure, "
-            "클라우드, 인프라, 컨테이너, 오케스트레이션"
-        ),
-        "subgroups": {
-            "Cloud Providers": {
-                "AWS": ["aws", "amazon web services", "ec2", "s3", "bedrock"],
-                "Google Cloud": ["google cloud", "gcp"],
-                "Azure": ["azure", "microsoft azure", "azure openai"],
-                "Naver Cloud": ["naver cloud", "ncloud"],
-            },
-            "Containers & Orchestration": {
-                "Docker": ["docker", "docker desktop"],
+            "Containers / Orchestration": {
+                "Docker": ["docker", "dockerfile", "docker desktop"],
                 "Kubernetes": ["kubernetes", "k8s"],
-            },
-            "Serverless / Edge": {
-                "AWS Lambda": ["aws lambda", "lambda function", "lambda"],
-                "Cloudflare Workers": ["cloudflare workers", "workers"],
-            },
-            "Networking / CDN": {
-                "Cloudflare": ["cloudflare"],
-                "Vercel": ["vercel"],
-            },
+            }
         },
     },
-    "Data Engineering & Messaging": {
+
+    "Data Engineering & Streaming": {
         "description": (
-            "streaming, batch processing, data pipelines, analytics engineering, messaging systems, "
-            "데이터 엔지니어링, 메시징, ETL, 스트림 처리"
+            "streaming systems, workflow orchestration, big data processing, distributed data pipelines, "
+            "데이터 엔지니어링, 스트리밍, 워크플로우, 빅데이터 처리"
         ),
         "subgroups": {
-            "Streaming / Messaging": {
+            "Data / Messaging": {
                 "Kafka": ["kafka", "apache kafka"],
-                "RabbitMQ": ["rabbitmq"],
-                "ActiveMQ": ["activemq", "active mq"],
-            },
-            "Big Data Processing": {
                 "Spark": ["spark", "apache spark", "pyspark"],
-                "Flink": ["flink", "apache flink"],
-                "Hadoop": ["hadoop", "apache hadoop"],
-            },
-            "Data Pipeline / Workflow": {
                 "Airflow": ["airflow", "apache airflow"],
-                "Prefect": ["prefect"],
-                "dbt": ["dbt", "data build tool"],
-            },
+                "Hadoop": ["hadoop", "apache hadoop"],
+            }
         },
     },
-    "DevOps & CI/CD": {
-        "description": (
-            "continuous integration, deployment automation, observability, infrastructure as code, "
-            "CI/CD, 데브옵스, 관측성, IaC"
-        ),
-        "subgroups": {
-            "CI/CD": {
-                "GitHub Actions": ["github actions"],
-                "GitLab CI": ["gitlab ci", "gitlab pipeline"],
-                "Jenkins": ["jenkins"],
-                "ArgoCD": ["argocd", "argo cd"],
-            },
-            "Monitoring / Observability": {
-                "Prometheus": ["prometheus"],
-                "Grafana": ["grafana"],
-                "Datadog": ["datadog"],
-            },
-            "Logging": {
-                "ELK Stack": ["elk stack", "elasticsearch logstash kibana", "logstash kibana"],
-            },
-            "Infrastructure as Code": {
-                "Terraform": ["terraform", "opentofu"],
-                "Ansible": ["ansible"],
-            },
-        },
-    },
-    "Collaboration & Tools": {
-        "description": (
-            "developer productivity, collaboration, ide tooling, api tooling, package management, "
-            "개발 도구, 협업 도구, IDE, API 도구"
-        ),
-        "subgroups": {
-            "Version Control": {
-                "GitHub": ["github", "copilot"],
-                "GitLab": ["gitlab"],
-            },
-            "Project / Docs": {
-                "Jira": ["jira", "atlassian jira"],
-                "Confluence": ["confluence"],
-                "Notion": ["notion"],
-            },
-            "API Tools": {
-                "Postman": ["postman"],
-                "Swagger": ["swagger", "openapi"],
-            },
-            "IDE / Editors": {
-                "VS Code": ["vs code", "vscode", "visual studio code"],
-                "IntelliJ": ["intellij", "jetbrains"],
-            },
-            "Package Managers": {
-                "npm": ["npm"],
-                "pnpm": ["pnpm"],
-            },
-        },
-    },
+
     "Other Tech": {
         "description": (
             "general software and technology news that is related to tech but does not map to a tracked stack, "
@@ -216,7 +133,6 @@ TECH_STACK_TAXONOMY = {
         "subgroups": {},
     },
 }
-
 
 def _build_category_defs() -> dict[str, str]:
     return {

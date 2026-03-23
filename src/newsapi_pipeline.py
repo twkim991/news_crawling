@@ -86,6 +86,55 @@ def normalize_newsapi_df(df: pd.DataFrame) -> pd.DataFrame:
     return df[["source", "title", "description", "content", "url", "published_at"]]
 
 
+def run_newsapi_collection(
+    query=None,
+    from_date=None,
+    to_date=None,
+    language="en",
+    page_size=100,
+    max_pages=1,
+    raw_output=None,
+    output_path=None,
+):
+    if not API_KEY:
+        raise RuntimeError("Missing NewsAPI key. Set `newsapi_key` in the environment or .env file.")
+
+    # 기본값 처리
+    if query is None:
+        query = '(python OR java OR javascript OR typescript OR react OR spring OR django OR fastapi OR pytorch OR tensorflow OR openai OR kubernetes OR docker OR aws OR azure OR "google cloud" OR postgresql OR mongodb OR redis OR kafka OR jenkins OR terraform)'
+
+    if from_date is None or to_date is None:
+        raise ValueError("from_date and to_date must be provided in pipeline execution")
+
+    print("[NewsAPI] Fetch")
+    raw_df = fetch_newsapi_everything(
+        query=query,
+        from_date=from_date,
+        to_date=to_date,
+        language=language,
+        page_size=page_size,
+        max_pages=max_pages,
+    )
+
+    print("raw rows:", len(raw_df))
+
+    if raw_output:
+        raw_df.to_csv(raw_output, index=False, encoding="utf-8-sig")
+
+    print("[NewsAPI] Normalize")
+    norm_df = normalize_newsapi_df(raw_df)
+
+    print("[NewsAPI] Preprocess")
+    clean_df = preprocess_news_df(norm_df)
+
+    print("processed rows:", len(clean_df))
+
+    if output_path:
+        clean_df.to_csv(output_path, index=False, encoding="utf-8-sig")
+
+    return clean_df
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch and preprocess NewsAPI articles")
     parser.add_argument(

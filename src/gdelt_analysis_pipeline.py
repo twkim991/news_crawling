@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 
@@ -30,6 +31,10 @@ def _build_text_signal(df: pd.DataFrame) -> pd.Series:
         + _safe_series(df, "description") + " "
         + _safe_series(df, "content")
     ).str.strip()
+
+
+def _year_month_to_suffix(year_month: str) -> str:
+    return str(year_month).strip().replace("-", "_")
 
 
 def _build_keyword_pattern(keyword: str) -> str:
@@ -131,11 +136,85 @@ def _apply_binary_tech_classifier(
     return working
 
 
-def main() -> None:
+def run_gdelt_analysis(
+    input_path,
+    output_dir,
+    output_prefix="gdelt",
+    year_month=None,
+):
+    os.makedirs(output_dir, exist_ok=True)
+
     print("[GDELT Analysis] Load processed data")
-    df = pd.read_csv(INPUT_PATH)
-    print("loaded rows:", len(df))
-    print("loaded columns:", list(df.columns))
+    df = pd.read_csv(input_path)
+
+    text_signal = _build_text_signal(df)
+    df = df.loc[text_signal.ne("")].copy()
+
+    if df.empty:
+        print("No data")
+        return
+
+    scored_df = _apply_binary_tech_classifier(
+        df,
+        model_path=BINARY_MODEL_PATH,
+        batch_size=BINARY_BATCH_SIZE,
+        threshold=BINARY_THRESHOLD,
+    )
+
+    gated_df = _apply_devtech_keyword_gate(scored_df)
+
+    gated_df["final_is_devtech"] = (
+        (gated_df["is_tech"] == 1) & (gated_df["is_devtech"] == 1)
+    ).astype(int)
+
+    binary_output_path = os.path.join(output_dir, f"{output_prefix}_binary_scored.csv")
+    gated_df.to_csv(binary_output_path, index=False, encoding="utf-8-sig")
+
+    tech_df = gated_df.loc[gated_df["final_is_devtech"] == 1].copy()
+
+    if tech_df.empty:
+        print("No tech data")
+        return
+
+    result_df = classify_subcategory(tech_df)
+
+    output_path = os.path.join(output_dir, f"{output_prefix}_tech_analyzed.csv")
+    result_df.to_csv(output_path, index=False, encoding="utf-8-sig")
+
+    trend_reports = build_trend_reports(result_df)
+    save_trend_reports(trend_reports, output_dir, prefix=output_prefix)
+
+    return result_df
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Analyze processed GDELT tech data and build trend reports"
+    )
+    parser.add_argument("--year-month", default=None, help="month in YYYY-MM format")
+    parser.add_argument("--input-path", default=INPUT_PATH, help="processed GDELT csv path")
+    parser.add_argument("--output-dir", default=OUTPUT_DIR, help="directory to save analysis outputs")
+    parser.add_argument("--output-prefix", default="gdelt", help="prefix for output file names")
+    args = parser.parse_args()
+
+    if args.year_month:
+        suffix = _year_month_to_suffix(args.year_month)
+        input_path = args.input_path or os.path.join("data", "processed", f"gdelt_processed_{suffix}.csv")
+        output_dir = args.output_dir or os.path.join("outputs", suffix)
+        output_prefix = args.output_prefix or f"gdelt_{suffix}"
+    else:
+        input_path = args.input_path or INPUT_PATH
+        output_dir = args.output_dir or OUTPUT_DIR
+        output_prefix = args.output_prefix or "gdelt"
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    print("[GDELT Analysis] Load processed data")
+    print("input_path:", input_path)
+    print("output_dir:", output_dir)
+    print("output_prefix:", output_prefix)
+
+    df = pd.read_csv(input_path)
 
     # 이미 gdelt_pipeline에서 preprocess_news_df()를 거친 파일이므로
     # 여기서는 재전처리하지 않고 바로 분석용 최소 필터만 적용
@@ -195,7 +274,7 @@ def main() -> None:
     print("\n[GDELT Analysis] final_is_devtech distribution")
     print(gated_df["final_is_devtech"].value_counts(dropna=False))
 
-    binary_output_path = os.path.join(OUTPUT_DIR, "gdelt_binary_scored.csv")
+    binary_output_path = os.path.join(args.output_dir, f"{args.output_prefix}_binary_scored.csv")
     print("[GDELT Analysis] Save binary + gate scored csv")
     gated_df.to_csv(binary_output_path, index=False, encoding="utf-8-sig")
 
@@ -217,7 +296,7 @@ def main() -> None:
     else:
         print("\n[GDELT Analysis] 'tech_category' column not found in result")
 
-    output_path = os.path.join(OUTPUT_DIR, "gdelt_tech_analyzed.csv")
+    output_path = os.path.join(args.output_dir, f"{args.output_prefix}_tech_analyzed.csv")
     print("[GDELT Analysis] Save analyzed csv")
     result_df.to_csv(output_path, index=False, encoding="utf-8-sig")
 
@@ -225,7 +304,7 @@ def main() -> None:
     trend_reports = build_trend_reports(result_df)
 
     print("[GDELT Analysis] Save trend reports")
-    trend_paths = save_trend_reports(trend_reports, OUTPUT_DIR, prefix="gdelt")
+    trend_paths = save_trend_reports(trend_reports, args.output_dir, prefix=args.output_prefix)
 
     print("\nSaved:", binary_output_path)
     print("Saved:", output_path)

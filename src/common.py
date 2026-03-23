@@ -471,4 +471,32 @@ def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[valid_index, "top2_category"] = restored_top2_category
     df.loc[valid_index, "top2_score"] = restored_top2_score.astype(float)
 
-    return annotate_stack_taxonomy(df)
+    df = annotate_stack_taxonomy(df)
+
+    stack_category_series = df["stack_categories"].fillna("").astype(str).str.strip()
+    stack_label_series = df["stack_labels"].fillna("").astype(str).str.strip()
+
+    single_stack_category_mask = stack_category_series.ne("") & ~stack_category_series.str.contains(r"\|", regex=True)
+    other_tech_mask = df["tech_category"].fillna("").eq("Other Tech")
+
+    # 임베딩 분류가 Other Tech로 떨어졌더라도,
+    # stack taxonomy에서 단일 카테고리가 명확하면 그 카테고리로 보정
+    override_mask = single_stack_category_mask & other_tech_mask
+
+    df.loc[override_mask, "tech_category"] = stack_category_series.loc[override_mask]
+    df.loc[override_mask, "tech_category_score"] = np.maximum(
+        df.loc[override_mask, "tech_category_score"].astype(float),
+        0.70,
+    )
+    df.loc[override_mask, "tech_category_score_gap"] = np.maximum(
+        df.loc[override_mask, "tech_category_score_gap"].astype(float),
+        0.10,
+    )
+
+    print("[Subcategory] stack-based override rows:", int(override_mask.sum()))
+    print(
+        "[Subcategory] overridden category distribution:\n",
+        df.loc[override_mask, "tech_category"].value_counts(dropna=False)
+    )
+
+    return df

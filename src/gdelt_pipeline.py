@@ -4,7 +4,7 @@ import json
 import os
 import re
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import pandas as pd
@@ -109,6 +109,50 @@ def _parse_datetime(value: str) -> datetime:
     if len(value) == 14:
         return datetime.strptime(value, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
     raise ValueError("Datetime must be YYYYMMDD or YYYYMMDDHHMMSS")
+
+
+def _resolve_default_utc_window() -> tuple[str, str]:
+    now_utc = datetime.now(timezone.utc)
+
+    end_dt = datetime(
+        year=now_utc.year,
+        month=now_utc.month,
+        day=now_utc.day,
+        tzinfo=timezone.utc,
+    )
+    start_dt = end_dt - timedelta(days=1)
+
+    return (
+        start_dt.strftime("%Y%m%d%H%M%S"),
+        end_dt.strftime("%Y%m%d%H%M%S"),
+    )
+
+
+def _resolve_month_utc_window(year_month: str) -> tuple[str, str]:
+    value = str(year_month).strip()
+    try:
+        year = int(value[:4])
+        month = int(value[5:7])
+    except Exception as exc:
+        raise ValueError("year_month must be in YYYY-MM format") from exc
+
+    if len(value) != 7 or value[4] != "-":
+        raise ValueError("year_month must be in YYYY-MM format")
+
+    if not (1 <= month <= 12):
+        raise ValueError("month must be between 01 and 12")
+
+    start_dt = datetime(year=year, month=month, day=1, tzinfo=timezone.utc)
+
+    if month == 12:
+        end_dt = datetime(year=year + 1, month=1, day=1, tzinfo=timezone.utc)
+    else:
+        end_dt = datetime(year=year, month=month + 1, day=1, tzinfo=timezone.utc)
+
+    return (
+        start_dt.strftime("%Y%m%d%H%M%S"),
+        end_dt.strftime("%Y%m%d%H%M%S"),
+    )
 
 
 def _safe_series(df: pd.DataFrame, column: str) -> pd.Series:
@@ -317,19 +361,53 @@ def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None =
     tech_re = _build_tech_keyword_regex(extra_keywords)
     working = df.copy()
 
-    signal = (
-        _safe_series(working, "enhanced_themes") + " "
-        + _safe_series(working, "themes") + " "
-        + _safe_series(working, "v2_organizations") + " "
-        + _safe_series(working, "organizations") + " "
-        + _safe_series(working, "document_identifier") + " "
-        + _safe_series(working, "source_common_name")
-    )
+    target_columns = [
+        "enhanced_themes",
+        "themes",
+        "v2_organizations",
+        "organizations",
+        "document_identifier",
+        "source_common_name",
+    ]
 
-    working["is_tech_candidate"] = signal.str.contains(tech_re, na=False)
+    combined_mask = pd.Series(False, index=working.index)
+
+    print("[filter_tech_gkg_records] start")
+    print("[filter_tech_gkg_records] total rows:", len(working))
+
+    for column in target_columns:
+        if column not in working.columns:
+            print(f"[filter_tech_gkg_records] skip missing column: {column}")
+            continue
+
+        series = working[column].fillna("").astype(str)
+
+        if series.eq("").all():
+            print(f"[filter_tech_gkg_records] skip empty column: {column}")
+            continue
+
+        column_mask = series.str.contains(tech_re, na=False)
+        matched_count = int(column_mask.sum())
+
+        print(
+            f"[filter_tech_gkg_records] column={column} "
+            f"matched_rows={matched_count}"
+        )
+
+        combined_mask = combined_mask | column_mask
+
+    working["is_tech_candidate"] = combined_mask
     filtered = working.loc[working["is_tech_candidate"]].copy()
 
-    return filtered.drop_duplicates(subset=["gkg_record_id", "document_identifier", "file_timestamp"])
+    print("[filter_tech_gkg_records] filtered rows:", len(filtered))
+
+    deduped = filtered.drop_duplicates(
+        subset=["gkg_record_id", "document_identifier", "file_timestamp"]
+    ).copy()
+
+    print("[filter_tech_gkg_records] deduped rows:", len(deduped))
+
+    return deduped
 
 
 def _slug_to_title(url: str) -> str:
@@ -417,13 +495,54 @@ def _write_failure_report(failures: list[dict], path: str) -> None:
     with open(path, "w", encoding="utf-8") as fp:
         json.dump(failures, fp, ensure_ascii=False, indent=2)
 
+def run_gdelt_collection(
+    start_datetime=None,
+    end_datetime=None,
+    year_month=None,
+    max_files=96,
+    extra_keywords=None,
+    raw_output=None,
+    processed_output=None,
+    failure_log=None,
+):
+    if not start_datetime and not end_datetime:
+        start_datetime, end_datetime = _resolve_default_utc_window()
+
+    print("[GDELT] collection window")
+    print("start:", start_datetime)
+    print("end  :", end_datetime)
+
+    file_index_df = list_gkg_file_urls(
+        start_datetime,
+        end_datetime,
+        max_files=max_files,
+    )
+
+    raw_df, failures = download_gkg_files(file_index_df)
+
+    if raw_output:
+        raw_df.to_csv(raw_output, index=False, encoding="utf-8-sig")
+
+    if failure_log:
+        _write_failure_report(failures, failure_log)
+
+    tech_raw_df = filter_tech_gkg_records(raw_df, extra_keywords=extra_keywords)
+    normalized = normalize_gkg_df(tech_raw_df)
+    processed = preprocess_news_df(normalized)
+
+    if processed_output:
+        processed.to_csv(processed_output, index=False, encoding="utf-8-sig")
+
+    return processed
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Download and preprocess raw GDELT GKG files for tech-news trend analysis"
     )
-    parser.add_argument("--start-datetime", default="20260301000000", help="UTC start datetime (YYYYMMDD or YYYYMMDDHHMMSS)")
-    parser.add_argument("--end-datetime", default="20260302000000", help="UTC end datetime (YYYYMMDD or YYYYMMDDHHMMSS)")
+    parser.add_argument("--start-datetime", default=None, help="UTC start datetime (YYYYMMDD or YYYYMMDDHHMMSS)")
+    parser.add_argument("--end-datetime", default=None, help="UTC end datetime (YYYYMMDD or YYYYMMDDHHMMSS)")
+    parser.add_argument("--year-month", default=None, help="UTC month window in YYYY-MM format")
     parser.add_argument("--max-files", type=int, default=96, help="maximum number of 15-minute GKG files to download")
     parser.add_argument("--extra-keywords", nargs="*", default=None, help="extra technology keywords for candidate filtering")
     parser.add_argument("--raw-output", default=os.path.join(RAW_DIR, "gdelt_raw_gkg.csv"), help="raw GKG csv path")
@@ -431,10 +550,22 @@ def main() -> None:
     parser.add_argument("--failure-log", default=os.path.join(OUTPUT_DIR, "gdelt_failed_files.json"), help="json path for failed download/decode records")
     args = parser.parse_args()
 
+    if args.start_datetime and args.end_datetime:
+        start_datetime = args.start_datetime
+        end_datetime = args.end_datetime
+    elif not args.start_datetime and not args.end_datetime:
+        start_datetime, end_datetime = _resolve_default_utc_window()
+    else:
+        raise ValueError("Both --start-datetime and --end-datetime must be provided together")
+
+    print("[0] Resolved collection window")
+    print("start_datetime (UTC):", start_datetime)
+    print("end_datetime   (UTC):", end_datetime)
+
     print("[1] Build GKG file list")
     file_index_df = list_gkg_file_urls(
-        args.start_datetime,
-        args.end_datetime,
+        start_datetime,
+        end_datetime,
         max_files=args.max_files,
     )
     print("selected files:", len(file_index_df))
@@ -451,7 +582,10 @@ def main() -> None:
     print("failure log:", args.failure_log)
 
     print("[3] Filter technology candidates")
+    print("raw_df shape:", raw_df.shape)
+    print("start filtering...")
     tech_raw_df = filter_tech_gkg_records(raw_df, extra_keywords=args.extra_keywords)
+    print("filter done")
     print("tech candidate rows:", len(tech_raw_df))
 
     print("[4] Normalize schema")

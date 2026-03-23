@@ -6,6 +6,49 @@ import pandas as pd
 from src.analytics import build_trend_reports, save_trend_reports
 from src.common import classify_subcategory, preprocess_news_df
 
+
+def run_newsapi_analysis(
+    input_path,
+    output_dir,
+    output_prefix="newsapi",
+):
+    os.makedirs(output_dir, exist_ok=True)
+
+    print("[NewsAPI Analysis] Load processed data")
+    df = pd.read_csv(input_path)
+
+    df = preprocess_news_df(df)
+    print("rows:", len(df))
+
+    if df.empty:
+        print("[NewsAPI Analysis] No data")
+        return
+
+    print("[NewsAPI Analysis] Subcategory classification")
+    result_df = classify_subcategory(df)
+
+    if "tech_category" in result_df.columns:
+        print("\n[NewsAPI Analysis] Category distribution")
+        print(result_df["tech_category"].value_counts(dropna=False))
+
+    output_path = os.path.join(output_dir, f"{output_prefix}_tech_analyzed.csv")
+
+    result_df.to_csv(output_path, index=False, encoding="utf-8-sig")
+
+    trend_paths = save_trend_reports(
+        build_trend_reports(result_df),
+        output_dir,
+        prefix=output_prefix,
+    )
+
+    print("\nSaved:", output_path)
+
+    for report_name, report_path in trend_paths.items():
+        print(f"{report_name}: {report_path}")
+
+    return result_df
+
+
 def main():
     parser = argparse.ArgumentParser(description="Analyze processed NewsAPI tech articles")
     parser.add_argument("--input", default=os.path.join("data", "processed", "newsapi_processed.csv"), help="processed NewsAPI csv path")

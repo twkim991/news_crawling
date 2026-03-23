@@ -1,149 +1,96 @@
 import argparse
 import os
+from datetime import datetime, timedelta, timezone
 
-import pandas as pd
-
-from src.analytics import build_run_metadata, build_trend_reports, save_run_metadata, save_trend_reports
-from src.classifier import load_binary_classifier, predict_binary
-from src.common import classify_subcategory, preprocess_news_df
-from src.loaders import load_gdelt, load_newsapi, load_ssafy_processed
-
-
-def _load_input_frames(newsapi_path: str | None, ssafy_path: str | None, gdelt_path: str | None) -> tuple[list[pd.DataFrame], list[str]]:
-    frames = []
-    sources = []
-
-    if newsapi_path:
-        frames.append(load_newsapi(newsapi_path))
-        sources.append(newsapi_path)
-
-    if ssafy_path:
-        frames.append(load_ssafy_processed(ssafy_path))
-        sources.append(ssafy_path)
-
-    if gdelt_path:
-        frames.append(load_gdelt(gdelt_path))
-        sources.append(gdelt_path)
-
-    return frames, sources
+# 각 파이프라인 import (수정 후 사용 가능)
+from src.gdelt_pipeline import run_gdelt_collection
+from src.gdelt_analysis_pipeline import run_gdelt_analysis
+from src.newsapi_pipeline import run_newsapi_collection
+from src.newsapi_analysis_pipeline import run_newsapi_analysis
 
 
-def _build_stack_article_view(tech_df: pd.DataFrame) -> pd.DataFrame:
-    if tech_df.empty or "stack_labels" not in tech_df.columns:
-        return pd.DataFrame(columns=list(tech_df.columns) + ["stack_label"])
-
-    stack_df = tech_df.copy()
-    stack_df["stack_label"] = stack_df["stack_labels"].fillna("").str.split("|")
-    stack_df = stack_df.explode("stack_label")
-    stack_df["stack_label"] = stack_df["stack_label"].fillna("").astype(str).str.strip()
-    return stack_df[stack_df["stack_label"].ne("")].reset_index(drop=True)
+def _resolve_default_run_date() -> str:
+    now_utc = datetime.now(timezone.utc)
+    target_date = (now_utc - timedelta(days=1)).date()
+    return target_date.strftime("%Y-%m-%d")
 
 
-def run_pipeline(
-    newsapi_path: str | None,
-    ssafy_path: str | None,
-    gdelt_path: str | None,
-    model_path: str,
-    output_dir: str,
-    metadata_path: str,
-    proba_threshold: float,
-    uncertainty_margin: float,
-):
-    print("Load datasets")
-    frames, input_sources = _load_input_frames(newsapi_path, ssafy_path, gdelt_path)
-    if not frames:
-        raise ValueError("At least one operational dataset must be provided.")
+def _date_to_suffix(run_date: str) -> str:
+    return run_date.replace("-", "_")
 
-    df = pd.concat(frames, ignore_index=True)
 
-    print("Preprocess")
-    df = preprocess_news_df(df)
+def run_daily_pipeline(run_date: str):
+    print("======================================")
+    print(" DAILY TECH NEWS PIPELINE START ")
+    print(" run_date:", run_date)
+    print("======================================")
 
-    print("Load classifier")
-    binary_model = load_binary_classifier(model_path)
+    suffix = _date_to_suffix(run_date)
 
-    print("Binary classification")
-    df = predict_binary(
-        df,
-        binary_model,
-        proba_threshold=proba_threshold,
-        uncertainty_margin=uncertainty_margin,
+    # -----------------------------
+    # 1. GDELT 수집
+    # -----------------------------
+    gdelt_processed_path = f"data/processed/gdelt_processed_{suffix}.csv"
+    gdelt_raw_path = f"data/raw/gdelt_raw_{suffix}.csv"
+    gdelt_failure_log = f"outputs/gdelt_failed_{suffix}.json"
+
+    print("\n[STEP 1] GDELT COLLECTION")
+    run_gdelt_collection(
+        processed_output=gdelt_processed_path,
+        raw_output=gdelt_raw_path,
+        failure_log=gdelt_failure_log,
     )
 
-    uncertain_df = df[df["is_uncertain"]].copy()
-    tech_df = df[(df["tech_pred"] == 1) & (~df["is_uncertain"])].copy()
+    # -----------------------------
+    # 2. GDELT 분석
+    # -----------------------------
+    gdelt_output_dir = f"outputs/gdelt/{suffix}"
 
-    print("Subcategory classification")
-    tech_df = classify_subcategory(tech_df)
-    stack_article_df = _build_stack_article_view(tech_df)
+    print("\n[STEP 2] GDELT ANALYSIS")
+    run_gdelt_analysis(
+        input_path=gdelt_processed_path,
+        output_dir=gdelt_output_dir,
+        output_prefix=f"gdelt_{suffix}",
+    )
 
-    os.makedirs(output_dir, exist_ok=True)
-    uncertain_df.to_csv(
-        os.path.join(output_dir, "uncertain_articles_all_sources.csv"),
-        index=False,
-        encoding="utf-8-sig",
-    )
-    tech_df.to_csv(
-        os.path.join(output_dir, "final_tech_news_all_sources.csv"),
-        index=False,
-        encoding="utf-8-sig",
-    )
-    stack_article_df.to_csv(
-        os.path.join(output_dir, "final_tech_news_by_stack.csv"),
-        index=False,
-        encoding="utf-8-sig",
-    )
-    for source_name, group in tech_df.groupby("source"):
-        safe_name = str(source_name).lower().replace("/", "_").replace(" ", "_")
-        group.to_csv(
-            os.path.join(output_dir, f"final_tech_news_{safe_name}.csv"),
-            index=False,
-            encoding="utf-8-sig",
-        )
+    # -----------------------------
+    # 3. NewsAPI 수집
+    # -----------------------------
+    newsapi_processed_path = f"data/processed/newsapi_processed_{suffix}.csv"
 
-    trend_paths = save_trend_reports(build_trend_reports(tech_df), output_dir)
-    metadata = build_run_metadata(
-        df,
-        tech_df,
-        input_sources=input_sources,
-        model_path=model_path,
-        output_dir=output_dir,
-        thresholds={
-            "binary_probability": proba_threshold,
-            "uncertainty_margin": uncertainty_margin,
-        },
+    print("\n[STEP 3] NEWSAPI COLLECTION")
+    run_newsapi_collection(
+        from_date=run_date,
+        to_date=run_date,
+        output_path=newsapi_processed_path,
     )
-    metadata["trend_reports"] = trend_paths
-    metadata["stack_article_output"] = os.path.join(output_dir, "final_tech_news_by_stack.csv")
-    save_run_metadata(metadata, metadata_path)
 
-    print("Done")
-    print(f"all sources output: {os.path.join(output_dir, 'final_tech_news_all_sources.csv')}")
-    print(f"stack article output: {os.path.join(output_dir, 'final_tech_news_by_stack.csv')}")
-    print(f"metadata: {metadata_path}")
-    for report_name, report_path in trend_paths.items():
-        print(f"{report_name}: {report_path}")
+    # -----------------------------
+    # 4. NewsAPI 분석
+    # -----------------------------
+    newsapi_output_dir = f"outputs/newsapi/{suffix}"
+
+    print("\n[STEP 4] NEWSAPI ANALYSIS")
+    run_newsapi_analysis(
+        input_path=newsapi_processed_path,
+        output_dir=newsapi_output_dir,
+        output_prefix=f"newsapi_{suffix}",
+    )
+
+    print("\n======================================")
+    print(" DAILY PIPELINE DONE ")
+    print("======================================")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Operational news inference + trend report pipeline")
-    parser.add_argument("--newsapi-input", default="data/processed/newsapi_processed.csv", help="processed NewsAPI csv path")
-    parser.add_argument("--ssafy-input", default=None, help="processed SSAFY/final csv path")
-    parser.add_argument("--gdelt-input", default=None, help="processed GDELT csv path")
-    parser.add_argument("--model", default="models/ag_binary_logreg.joblib", help="binary classifier path")
-    parser.add_argument("--output-dir", default="outputs", help="directory for inference outputs")
-    parser.add_argument("--metadata", default="outputs/metadata.json", help="run metadata json path")
-    parser.add_argument("--tech-threshold", type=float, default=0.55, help="binary tech probability threshold")
-    parser.add_argument("--uncertainty-margin", type=float, default=0.08, help="uncertain zone from 0.5")
+    parser = argparse.ArgumentParser(description="Daily news pipeline orchestrator")
+    parser.add_argument(
+        "--run-date",
+        default=None,
+        help="target date (YYYY-MM-DD), default = yesterday UTC",
+    )
     args = parser.parse_args()
 
-    run_pipeline(
-        newsapi_path=args.newsapi_input,
-        ssafy_path=args.ssafy_input,
-        gdelt_path=args.gdelt_input,
-        model_path=args.model,
-        output_dir=args.output_dir,
-        metadata_path=args.metadata,
-        proba_threshold=args.tech_threshold,
-        uncertainty_margin=args.uncertainty_margin,
-    )
+    run_date = args.run_date or _resolve_default_run_date()
+
+    run_daily_pipeline(run_date)
