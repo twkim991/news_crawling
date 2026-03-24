@@ -3,14 +3,14 @@
 import argparse
 import os
 import re
+from typing import Iterable
 
 import joblib
 import numpy as np
 import pandas as pd
 
-from src.analytics import build_trend_reports, save_trend_reports
-from src.common import classify_subcategory, encode_texts
-from src.taxonomy import STACK_ALIASES
+from src.common import classify_subcategory, encode_texts, build_text_series
+from src.taxonomy import STACK_ALIASES, STACK_EVENT_KEYWORDS
 
 INPUT_PATH = os.path.join("data", "processed", "gdelt_processed.csv")
 OUTPUT_DIR = "outputs"
@@ -53,7 +53,7 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", str(value).strip().lower())
 
 
-def _contains_any(text: str, keywords: list[str] | tuple[str, ...]) -> bool:
+def _contains_any(text: str, keywords: Iterable[str]) -> bool:
     normalized = _normalize_text(text)
     for keyword in keywords:
         if _normalize_text(keyword) in normalized:
@@ -143,7 +143,7 @@ def _match_stack_aliases_with_rules(
         matched_stacks.append(stack_name)
         debug_map[stack_name] = {
             "status": "accepted",
-            "reason": "ambiguous_with_context" if ambiguous else "alias_hit",
+            "reason": "ambiguous_with_context",
         }
 
     return matched_stacks, debug_map
@@ -163,7 +163,9 @@ def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
     gate_pass_flags = []
     rescue_applied_flags = []
 
-    for idx, (title, description, content) in enumerate(zip(title_series, description_series, content_series)):
+    for idx, (title, description, content) in enumerate(
+        zip(title_series, description_series, content_series)
+    ):
         stacks, debug_map = _match_stack_aliases_with_rules(title, description, content)
         matched_stack_names.append(", ".join(stacks))
 
@@ -171,7 +173,7 @@ def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
         all_parts = []
         ambiguous_only = True if stacks else False
 
-        for stack_name, info in STACK_ALIASES.items():
+        for stack_name in STACK_ALIASES.keys():
             log = debug_map.get(stack_name, {})
             reason = log.get("reason", "")
             status = log.get("status", "")
@@ -218,6 +220,7 @@ def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
 
     return working
 
+
 def _apply_binary_tech_classifier(
     df: pd.DataFrame,
     model_path: str,
@@ -254,6 +257,406 @@ def _apply_binary_tech_classifier(
     return working
 
 
+def _resolve_date_column(df: pd.DataFrame) -> str | None:
+    candidates = [
+        "published_at",
+        "publishedAt",
+        "publish_date",
+        "published_date",
+        "date",
+        "datetime",
+        "seendate",
+    ]
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
+
+def _prepare_article_dates(df: pd.DataFrame) -> pd.DataFrame:
+    working = df.copy()
+    date_col = _resolve_date_column(working)
+    if date_col is None:
+        raise ValueError(
+            "날짜 컬럼을 찾지 못했습니다. processed GDELT 파일에 published_at / publishedAt / date / seendate 중 하나는 있어야 합니다."
+        )
+
+    working["article_datetime"] = pd.to_datetime(
+        working[date_col],
+        errors="coerce",
+        utc=True,
+    )
+    working = working.loc[working["article_datetime"].notna()].copy()
+
+    if working.empty:
+        return working
+
+    working["article_date"] = working["article_datetime"].dt.strftime("%Y-%m-%d")
+    iso_calendar = working["article_datetime"].dt.isocalendar()
+    working["article_week"] = (
+        iso_calendar["year"].astype(str)
+        + "-W"
+        + iso_calendar["week"].astype(str).str.zfill(2)
+    )
+    working["article_month"] = working["article_datetime"].dt.strftime("%Y-%m")
+
+    return working
+
+
+def _ensure_classification_columns(df: pd.DataFrame) -> pd.DataFrame:
+    working = df.copy()
+
+    for col, default in [
+        ("tech_category", "Other Tech"),
+        ("tech_category_score", 0.0),
+        ("tech_category_score_gap", 0.0),
+        ("top2_category", "Other Tech"),
+        ("top2_score", 0.0),
+        ("stack_labels", ""),
+        ("primary_stack", "Unspecified"),
+        ("stack_label_count", 0.0),
+    ]:
+        if col not in working.columns:
+            working[col] = default
+
+    return working
+
+
+def _finalize_classified_articles(df: pd.DataFrame) -> pd.DataFrame:
+    working = _ensure_classification_columns(df)
+
+    working = _prepare_article_dates(working)
+    if working.empty:
+        return working
+
+    stack_labels = _safe_series(working, "stack_labels").str.strip()
+    primary_stack = _safe_series(working, "primary_stack").str.strip()
+    tech_category = _safe_series(working, "tech_category").replace("", "Other Tech")
+
+    working["tracked_stack_list"] = stack_labels.apply(
+        lambda x: [item.strip() for item in str(x).split("|") if item.strip()]
+    )
+    working["tracked_stack_count"] = working["tracked_stack_list"].apply(len)
+
+    working["classification_type"] = np.where(
+        working["tracked_stack_count"] > 0,
+        "tracked_stack",
+        "other_tech",
+    )
+    working["tech_bucket"] = np.where(
+        working["tracked_stack_count"] > 0,
+        "Tracked Stack",
+        "Other Tech",
+    )
+
+    working["primary_stack"] = np.where(
+        primary_stack.eq("") | primary_stack.eq("Unspecified"),
+        np.where(working["tracked_stack_count"] > 0, working["tracked_stack_list"].str[0], "Unspecified"),
+        primary_stack,
+    )
+    working["tech_category"] = np.where(
+        working["tracked_stack_count"] > 0,
+        tech_category,
+        "Other Tech",
+    )
+
+    working = working.drop(columns=["tracked_stack_list"], errors="ignore")
+
+    preferred_columns = [
+        "article_datetime",
+        "article_date",
+        "article_week",
+        "article_month",
+        "classification_type",
+        "tech_bucket",
+        "tech_category",
+        "tech_category_score",
+        "tech_category_score_gap",
+        "top2_category",
+        "top2_score",
+        "primary_stack",
+        "stack_labels",
+        "stack_label_count",
+        "matched_devtech_aliases",
+        "matched_devtech_reasons",
+        "is_tech_score",
+        "is_tech",
+        "is_devtech",
+        "final_is_devtech",
+        "title",
+        "description",
+        "content",
+        "url",
+        "published_at",
+        "source",
+    ]
+
+    existing_preferred = [col for col in preferred_columns if col in working.columns]
+    remaining = [col for col in working.columns if col not in existing_preferred]
+
+    return (
+        working[existing_preferred + remaining]
+        .sort_values(["article_datetime", "is_tech_score"], ascending=[True, False])
+        .reset_index(drop=True)
+    )
+
+
+def _get_all_tracked_stacks() -> pd.DataFrame:
+    rows = []
+    for stack_name, info in STACK_ALIASES.items():
+        rows.append(
+            {
+                "stack_name": stack_name,
+                "stack_category": info.get("category", ""),
+                "stack_subgroup": info.get("subgroup", ""),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["stack_category", "stack_subgroup", "stack_name"]).reset_index(drop=True)
+
+
+def _has_event_signal(text: str) -> int:
+    normalized = _normalize_text(text)
+    return int(any(keyword in normalized for keyword in STACK_EVENT_KEYWORDS))
+
+
+def _explode_tracked_articles(tracked_df: pd.DataFrame) -> pd.DataFrame:
+    if tracked_df.empty:
+        return tracked_df.copy()
+
+    working = tracked_df.copy()
+    working["stack_list"] = _safe_series(working, "stack_labels").apply(
+        lambda x: [item.strip() for item in str(x).split("|") if item.strip()]
+    )
+    working = working.loc[working["stack_list"].map(len) > 0].copy()
+
+    if working.empty:
+        return working
+
+    working["stack_count_for_weight"] = working["stack_list"].map(len)
+    working["article_weight"] = 1.0 / working["stack_count_for_weight"]
+
+    text_signal = (
+        _safe_series(working, "title") + " "
+        + _safe_series(working, "description") + " "
+        + _safe_series(working, "content")
+    ).str.strip()
+    working["event_signal_hit"] = text_signal.apply(_has_event_signal)
+
+    exploded = working.explode("stack_list").rename(columns={"stack_list": "stack_name"})
+    exploded["stack_category"] = exploded["stack_name"].map(
+        lambda x: STACK_ALIASES.get(x, {}).get("category", "")
+    )
+    exploded["stack_subgroup"] = exploded["stack_name"].map(
+        lambda x: STACK_ALIASES.get(x, {}).get("subgroup", "")
+    )
+
+    return exploded.reset_index(drop=True)
+
+
+def _period_activity_ref(period_type: str) -> int:
+    if period_type == "daily":
+        return 5
+    if period_type == "weekly":
+        return 20
+    if period_type == "monthly":
+        return 60
+    raise ValueError(f"unknown period_type: {period_type}")
+
+
+def _build_period_score_rows(
+    exploded_df: pd.DataFrame,
+    period_col: str,
+    period_type: str,
+) -> pd.DataFrame:
+    if exploded_df.empty:
+        return pd.DataFrame()
+
+    all_stacks = _get_all_tracked_stacks()
+    all_periods = (
+        exploded_df[[period_col]]
+        .drop_duplicates()
+        .rename(columns={period_col: "period_value"})
+        .sort_values("period_value")
+        .reset_index(drop=True)
+    )
+
+    base_grid = all_periods.assign(_key=1).merge(
+        all_stacks.assign(_key=1),
+        on="_key",
+        how="inner",
+    ).drop(columns="_key")
+
+    group_cols = [period_col, "stack_name", "stack_category", "stack_subgroup"]
+
+    agg_spec = {
+        "article_count": ("stack_name", "size"),
+        "weighted_article_sum": ("article_weight", "sum"),
+        "avg_binary_score": ("is_tech_score", "mean"),
+        "event_hit_count": ("event_signal_hit", "sum"),
+    }
+
+    if "url" in exploded_df.columns:
+        agg_spec["unique_article_count"] = ("url", "nunique")
+    else:
+        agg_spec["unique_article_count"] = ("stack_name", "size")
+
+    grouped = (
+        exploded_df.groupby(group_cols, dropna=False)
+        .agg(**agg_spec)
+        .reset_index()
+        .rename(columns={period_col: "period_value"})
+    )
+
+    merged = base_grid.merge(
+        grouped,
+        on=["period_value", "stack_name", "stack_category", "stack_subgroup"],
+        how="left",
+    )
+
+    for col in [
+        "article_count",
+        "unique_article_count",
+        "weighted_article_sum",
+        "avg_binary_score",
+        "event_hit_count",
+    ]:
+        merged[col] = merged[col].fillna(0.0)
+
+    period_totals = (
+        merged.groupby("period_value", dropna=False)["weighted_article_sum"]
+        .sum()
+        .rename("period_total_weight")
+        .reset_index()
+    )
+    merged = merged.merge(period_totals, on="period_value", how="left")
+
+    merged["share_ratio"] = np.where(
+        merged["period_total_weight"] > 0,
+        merged["weighted_article_sum"] / merged["period_total_weight"],
+        0.0,
+    )
+    merged["event_ratio"] = np.where(
+        merged["article_count"] > 0,
+        merged["event_hit_count"] / merged["article_count"],
+        0.0,
+    )
+
+    activity_ref = _period_activity_ref(period_type)
+
+    merged["share_score"] = (merged["share_ratio"] * 18.0).round(4)
+    merged["volume_score"] = (
+        np.minimum(merged["article_count"] / activity_ref, 1.0) * 8.0
+    ).round(4)
+    merged["event_score"] = (
+        np.minimum(merged["event_ratio"], 1.0) * 2.0
+    ).round(4)
+    merged["confidence_score"] = (
+        np.minimum(merged["avg_binary_score"], 1.0) * 2.0
+    ).round(4)
+
+    merged["trend_score_raw"] = (
+        merged["share_score"]
+        + merged["volume_score"]
+        + merged["event_score"]
+        + merged["confidence_score"]
+    )
+    merged["trend_score_30"] = merged["trend_score_raw"].clip(upper=30.0).round(2)
+    merged["period_type"] = period_type
+
+    merged = merged.sort_values(["stack_name", "period_value"]).reset_index(drop=True)
+    merged["previous_trend_score_30"] = (
+        merged.groupby("stack_name")["trend_score_30"].shift(1)
+    )
+    merged["score_delta"] = (
+        merged["trend_score_30"] - merged["previous_trend_score_30"]
+    ).round(2)
+    merged["score_delta_pct"] = np.where(
+        merged["previous_trend_score_30"].fillna(0) > 0,
+        (
+            (merged["trend_score_30"] - merged["previous_trend_score_30"])
+            / merged["previous_trend_score_30"]
+            * 100.0
+        ).round(2),
+        np.nan,
+    )
+
+    ordered_cols = [
+        "period_type",
+        "period_value",
+        "stack_category",
+        "stack_subgroup",
+        "stack_name",
+        "article_count",
+        "unique_article_count",
+        "weighted_article_sum",
+        "period_total_weight",
+        "share_ratio",
+        "avg_binary_score",
+        "event_hit_count",
+        "event_ratio",
+        "share_score",
+        "volume_score",
+        "event_score",
+        "confidence_score",
+        "trend_score_raw",
+        "trend_score_30",
+        "previous_trend_score_30",
+        "score_delta",
+        "score_delta_pct",
+    ]
+    return merged[ordered_cols]
+
+
+def _build_stack_trend_scores(tracked_df: pd.DataFrame) -> pd.DataFrame:
+    exploded = _explode_tracked_articles(tracked_df)
+    if exploded.empty:
+        return pd.DataFrame(columns=[
+            "period_type",
+            "period_value",
+            "stack_category",
+            "stack_subgroup",
+            "stack_name",
+            "article_count",
+            "unique_article_count",
+            "weighted_article_sum",
+            "period_total_weight",
+            "share_ratio",
+            "avg_binary_score",
+            "event_hit_count",
+            "event_ratio",
+            "share_score",
+            "volume_score",
+            "event_score",
+            "confidence_score",
+            "trend_score_raw",
+            "trend_score_30",
+            "previous_trend_score_30",
+            "score_delta",
+            "score_delta_pct",
+        ])
+
+    daily = _build_period_score_rows(exploded, "article_date", "daily")
+    weekly = _build_period_score_rows(exploded, "article_week", "weekly")
+    monthly = _build_period_score_rows(exploded, "article_month", "monthly")
+
+    result = pd.concat([daily, weekly, monthly], ignore_index=True)
+
+    period_order = pd.Categorical(
+        result["period_type"],
+        categories=["daily", "weekly", "monthly"],
+        ordered=True,
+    )
+    result["period_type"] = period_order
+
+    return (
+        result.sort_values(
+            ["period_type", "period_value", "trend_score_30", "stack_name"],
+            ascending=[True, True, False, True],
+        )
+        .reset_index(drop=True)
+    )
+
+
 def run_gdelt_analysis(
     input_path,
     output_dir,
@@ -265,83 +668,6 @@ def run_gdelt_analysis(
     print("[GDELT Analysis] Load processed data")
     df = pd.read_csv(input_path)
 
-    text_signal = _build_text_signal(df)
-    df = df.loc[text_signal.ne("")].copy()
-
-    if df.empty:
-        print("No data")
-        return
-
-    scored_df = _apply_binary_tech_classifier(
-        df,
-        model_path=BINARY_MODEL_PATH,
-        batch_size=BINARY_BATCH_SIZE,
-        threshold=BINARY_THRESHOLD,
-    )
-
-    gated_df = _apply_devtech_keyword_gate(scored_df)
-
-    gated_df["final_is_devtech"] = (
-        (
-            (gated_df["is_tech"] == 1) & (gated_df["is_devtech"] == 1)
-        ) | (
-            (gated_df["is_devtech"] == 1)
-            & (gated_df["ambiguous_only_match"] == 0)
-            & (gated_df["is_tech_score"] >= 0.30)
-        )
-    ).astype(int)
-
-    binary_output_path = os.path.join(output_dir, f"{output_prefix}_binary_scored.csv")
-    gated_df.to_csv(binary_output_path, index=False, encoding="utf-8-sig")
-
-    tech_df = gated_df.loc[gated_df["final_is_devtech"] == 1].copy()
-
-    if tech_df.empty:
-        print("No tech data")
-        return
-
-    result_df = classify_subcategory(tech_df)
-
-    output_path = os.path.join(output_dir, f"{output_prefix}_tech_analyzed.csv")
-    result_df.to_csv(output_path, index=False, encoding="utf-8-sig")
-
-    trend_reports = build_trend_reports(result_df)
-    save_trend_reports(trend_reports, output_dir, prefix=output_prefix)
-
-    return result_df
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Analyze processed GDELT tech data and build trend reports"
-    )
-    parser.add_argument("--year-month", default=None, help="month in YYYY-MM format")
-    parser.add_argument("--input-path", default=INPUT_PATH, help="processed GDELT csv path")
-    parser.add_argument("--output-dir", default=OUTPUT_DIR, help="directory to save analysis outputs")
-    parser.add_argument("--output-prefix", default="gdelt", help="prefix for output file names")
-    args = parser.parse_args()
-
-    if args.year_month:
-        suffix = _year_month_to_suffix(args.year_month)
-        input_path = args.input_path or os.path.join("data", "processed", f"gdelt_processed_{suffix}.csv")
-        output_dir = args.output_dir or os.path.join("outputs", suffix)
-        output_prefix = args.output_prefix or f"gdelt_{suffix}"
-    else:
-        input_path = args.input_path or INPUT_PATH
-        output_dir = args.output_dir or OUTPUT_DIR
-        output_prefix = args.output_prefix or "gdelt"
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    print("[GDELT Analysis] Load processed data")
-    print("input_path:", input_path)
-    print("output_dir:", output_dir)
-    print("output_prefix:", output_prefix)
-
-    df = pd.read_csv(input_path)
-
-    # 이미 gdelt_pipeline에서 preprocess_news_df()를 거친 파일이므로
-    # 여기서는 재전처리하지 않고 바로 분석용 최소 필터만 적용
     print("[GDELT Analysis] Filter empty text rows")
     text_signal = _build_text_signal(df)
     before_rows = len(df)
@@ -351,7 +677,7 @@ def main() -> None:
 
     if df.empty:
         print("[GDELT Analysis] No rows left after filtering. Abort.")
-        return
+        return None
 
     print("[GDELT Analysis] Binary tech classification start")
     scored_df = _apply_binary_tech_classifier(
@@ -362,34 +688,9 @@ def main() -> None:
     )
     print("[GDELT Analysis] Binary tech classification done")
 
-    print("\n[GDELT Analysis] is_tech distribution")
-    print(scored_df["is_tech"].value_counts(dropna=False))
-
-    print("\n[GDELT Analysis] Top binary scores sample")
-    print(
-        scored_df[["title", "is_tech_score", "is_tech"]]
-        .sort_values("is_tech_score", ascending=False)
-        .head(10)
-        .to_dict(orient="records")
-    )
-
     print("[GDELT Analysis] Dev-tech keyword gate start")
     gated_df = _apply_devtech_keyword_gate(scored_df)
     print("[GDELT Analysis] Dev-tech keyword gate done")
-
-    print("\n[GDELT Analysis] is_devtech distribution")
-    print(gated_df["is_devtech"].value_counts(dropna=False))
-
-    print("\n[GDELT Analysis] Top dev-tech matched sample")
-    print(
-        gated_df.loc[
-            gated_df["is_devtech"] == 1,
-            ["title", "matched_devtech_aliases", "is_tech_score", "is_tech", "is_devtech"]
-        ]
-        .sort_values("is_tech_score", ascending=False)
-        .head(10)
-        .to_dict(orient="records")
-    )
 
     gated_df["final_is_devtech"] = (
         (
@@ -398,54 +699,144 @@ def main() -> None:
             (gated_df["is_devtech"] == 1)
             & (gated_df["ambiguous_only_match"] == 0)
             & (gated_df["is_tech_score"] >= 0.30)
+        ) | (
+            (gated_df["is_tech"] == 1)
+            & (gated_df["is_devtech"] == 0)
         )
     ).astype(int)
 
-    print("\n[GDELT Analysis] final_is_devtech distribution")
-    print(gated_df["final_is_devtech"].value_counts(dropna=False))
-
-    binary_output_path = os.path.join(output_dir, f"{output_prefix}_binary_scored.csv")
-    print("[GDELT Analysis] Save binary + gate scored csv")
-    gated_df.to_csv(binary_output_path, index=False, encoding="utf-8-sig")
-
     tech_df = gated_df.loc[gated_df["final_is_devtech"] == 1].copy()
-    print("[GDELT Analysis] Rows kept for subcategory classification:", len(tech_df))
+    print("[GDELT Analysis] Rows kept for final classification:", len(tech_df))
 
     if tech_df.empty:
-        print("[GDELT Analysis] No rows passed the 2-stage gate. Abort subcategory analysis.")
-        print("\nSaved:", binary_output_path)
-        return
+        print("[GDELT Analysis] No rows passed final gate. Abort.")
+        return None
 
-    print("[GDELT Analysis] Subcategory classification start")
+    if "text" not in tech_df.columns:
+        tech_df = tech_df.copy()
+        tech_df["text"] = build_text_series(
+            _safe_series(tech_df, "title"),
+            _safe_series(tech_df, "description"),
+            _safe_series(tech_df, "content"),
+        )
+
+    print("[GDELT Analysis] Subcategory + stack classification start")
     result_df = classify_subcategory(tech_df)
-    print("[GDELT Analysis] Subcategory classification done")
+    print("[GDELT Analysis] Subcategory + stack classification done")
 
-    if "tech_category" in result_df.columns:
-        print("\n[GDELT Analysis] Category distribution")
-        print(result_df["tech_category"].value_counts(dropna=False))
+    full_classified_df = _finalize_classified_articles(result_df)
+    if full_classified_df.empty:
+        print("[GDELT Analysis] No classified rows after date normalization.")
+        return None
+
+    tracked_only_df = full_classified_df.loc[
+        full_classified_df["tech_bucket"] != "Other Tech"
+    ].copy()
+
+    stack_trend_scores_df = _build_stack_trend_scores(tracked_only_df)
+
+    full_output_path = os.path.join(
+        output_dir,
+        f"{output_prefix}_classified_all.csv",
+    )
+    tracked_output_path = os.path.join(
+        output_dir,
+        f"{output_prefix}_classified_tracked_only.csv",
+    )
+    trend_output_path = os.path.join(
+        output_dir,
+        f"{output_prefix}_stack_trend_scores.csv",
+    )
+    debug_output_path = os.path.join(
+        output_dir,
+        f"{output_prefix}_classified_debug.csv",
+    )
+
+    debug_columns = [
+        "article_datetime",
+        "article_date",
+        "article_week",
+        "article_month",
+        "classification_type",
+        "tech_bucket",
+        "tech_category",
+        "tech_category_score",
+        "tech_category_score_gap",
+        "top2_category",
+        "top2_score",
+        "primary_stack",
+        "stack_labels",
+        "stack_label_count",
+        "matched_devtech_aliases",
+        "matched_devtech_reasons",
+        "all_devtech_rule_logs",
+        "ambiguous_only_match",
+        "is_tech_score",
+        "is_tech",
+        "is_devtech",
+        "final_is_devtech",
+        "title",
+        "description",
+        "content",
+        "url",
+        "published_at",
+        "source",
+    ]
+    debug_columns = [col for col in debug_columns if col in full_classified_df.columns]
+    debug_df = full_classified_df[debug_columns].copy()
+
+    full_classified_df.to_csv(full_output_path, index=False, encoding="utf-8-sig")
+    tracked_only_df.to_csv(tracked_output_path, index=False, encoding="utf-8-sig")
+    stack_trend_scores_df.to_csv(trend_output_path, index=False, encoding="utf-8-sig")
+    debug_df.to_csv(debug_output_path, index=False, encoding="utf-8-sig")
+
+    print("\nSaved:", full_output_path)
+    print("Saved:", tracked_output_path)
+    print("Saved:", trend_output_path)
+
+    return {
+        "classified_all": full_classified_df,
+        "classified_tracked_only": tracked_only_df,
+        "stack_trend_scores": stack_trend_scores_df,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Analyze processed GDELT tech data and build stack trend scores"
+    )
+    parser.add_argument("--year-month", default=None, help="month in YYYY-MM format")
+    parser.add_argument("--input-path", default=INPUT_PATH, help="processed GDELT csv path")
+    parser.add_argument("--output-dir", default=OUTPUT_DIR, help="directory to save analysis outputs")
+    parser.add_argument("--output-prefix", default="gdelt", help="prefix for output file names")
+    args = parser.parse_args()
+
+    if args.year_month:
+        suffix = _year_month_to_suffix(args.year_month)
+        input_path = args.input_path or os.path.join(
+            "data",
+            "processed",
+            f"gdelt_processed_{suffix}.csv",
+        )
+        output_dir = args.output_dir or os.path.join("outputs", suffix)
+        output_prefix = args.output_prefix or f"gdelt_{suffix}"
     else:
-        print("\n[GDELT Analysis] 'tech_category' column not found in result")
+        input_path = args.input_path or INPUT_PATH
+        output_dir = args.output_dir or OUTPUT_DIR
+        output_prefix = args.output_prefix or "gdelt"
 
-    output_path = os.path.join(output_dir, f"{output_prefix}_tech_analyzed.csv")
-    print("[GDELT Analysis] Save analyzed csv")
-    result_df.to_csv(output_path, index=False, encoding="utf-8-sig")
+    os.makedirs(output_dir, exist_ok=True)
 
-    print("[GDELT Analysis] Build trend reports")
-    trend_reports = build_trend_reports(result_df)
+    print("[GDELT Analysis] input_path :", input_path)
+    print("[GDELT Analysis] output_dir :", output_dir)
+    print("[GDELT Analysis] output_prefix :", output_prefix)
 
-    print("[GDELT Analysis] Save trend reports")
-    trend_paths = save_trend_reports(trend_reports, output_dir, prefix=output_prefix)
-
-    print("\nSaved:", binary_output_path)
-    print("Saved:", output_path)
-    print(
-    scored_df[["title", "is_tech_score", "is_tech"]]
-    .sort_values("is_tech_score", ascending=False)
-    .head(10)
-    .to_dict(orient="records")
-)
-    for report_name, report_path in trend_paths.items():
-        print(f"{report_name}: {report_path}")
+    run_gdelt_analysis(
+        input_path=input_path,
+        output_dir=output_dir,
+        output_prefix=output_prefix,
+        year_month=args.year_month,
+    )
 
 
 if __name__ == "__main__":

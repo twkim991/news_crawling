@@ -1,3 +1,5 @@
+# common.py
+
 import re
 from functools import lru_cache
 from typing import Iterable
@@ -225,27 +227,14 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     result_columns = [
-        "stack_matches",
         "stack_labels",
-        "mentioned_stacks",
-        "stack_categories",
-        "stack_subgroups",
         "primary_stack",
-        "secondary_stack",
-        "primary_stack_subgroup",
-        "secondary_stack_subgroup",
-        "stack_domain",
-        "stack_match_count",
         "stack_label_count",
-        "stack_confidences",
-        "primary_stack_score",
-        "primary_stack_margin",
-        "stack_disambiguation_notes",
     ]
 
     if df.empty:
         for column in result_columns:
-            df[column] = pd.Series(dtype="object" if "count" not in column and "score" not in column and "margin" not in column else "float64")
+            df[column] = pd.Series(dtype="object" if column not in {"stack_label_count"} else "float64")
         return df
 
     def _safe_series(frame: pd.DataFrame, column: str) -> pd.Series:
@@ -318,22 +307,9 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
     fallback_text = (title_series + " " + description_series + " " + content_series).str.strip()
     analysis_text = text_series.where(text_series.ne(""), fallback_text).str.lower().str.strip()
 
-    df["stack_matches"] = ""
     df["stack_labels"] = ""
-    df["mentioned_stacks"] = ""
-    df["stack_categories"] = ""
-    df["stack_subgroups"] = ""
     df["primary_stack"] = "Unspecified"
-    df["secondary_stack"] = ""
-    df["primary_stack_subgroup"] = ""
-    df["secondary_stack_subgroup"] = ""
-    df["stack_domain"] = _safe_series(df, "tech_category").replace("", "Other Tech")
-    df["stack_match_count"] = 0.0
     df["stack_label_count"] = 0.0
-    df["stack_confidences"] = ""
-    df["primary_stack_score"] = 0.0
-    df["primary_stack_margin"] = 0.0
-    df["stack_disambiguation_notes"] = ""
 
     valid_mask = analysis_text.ne("")
     if not valid_mask.any():
@@ -398,54 +374,21 @@ def annotate_stack_taxonomy(df: pd.DataFrame) -> pd.DataFrame:
         selected_matches = [item for item in mentioned_matches if item[4] >= STACK_SCORE_THRESHOLD][:STACK_MAX_TAGS]
 
         match_names = [name for name, _, _, _, _ in selected_matches]
-        match_categories = [category for _, category, _, _, _ in selected_matches]
-        match_subgroups = [subgroup for _, _, subgroup, _, _ in selected_matches]
-        confidence_parts = [f"{name}:{score:.1f}" for name, _, _, _, score in selected_matches]
 
         primary_stack = "Unspecified"
-        primary_subgroup = ""
-        secondary_stack = ""
-        secondary_subgroup = ""
-        stack_domain = "Other Tech"
-        primary_score = 0.0
-        primary_margin = 0.0
 
         if selected_matches:
-            top_name, top_category, top_subgroup, _, top_score = selected_matches[0]
+            top_name, _, _, _, top_score = selected_matches[0]
             next_score = selected_matches[1][4] if len(selected_matches) > 1 else 0.0
             primary_margin = float(top_score - next_score)
+
             if top_score >= PRIMARY_STACK_MIN_SCORE and primary_margin >= PRIMARY_STACK_MIN_MARGIN:
                 primary_stack = top_name
-                primary_subgroup = top_subgroup
-                stack_domain = top_category
-                primary_score = float(top_score)
-            else:
-                stack_domain = top_category
-                primary_score = float(top_score)
-
-            if primary_stack != "Unspecified":
-                remaining = [item for item in selected_matches if item[0] != primary_stack]
-                if remaining:
-                    secondary_stack = remaining[0][0]
-                    secondary_subgroup = remaining[0][2]
 
         unique_results.append({
-            "stack_matches": "|".join(f"{name}:{hit_count}:{score:.1f}" for name, _, _, hit_count, score in selected_matches),
             "stack_labels": "|".join(match_names),
-            "mentioned_stacks": "|".join(name for name, *_ in mentioned_matches[:STACK_MAX_TAGS]),
-            "stack_categories": "|".join(match_categories),
-            "stack_subgroups": "|".join(match_subgroups),
             "primary_stack": primary_stack,
-            "secondary_stack": secondary_stack,
-            "primary_stack_subgroup": primary_subgroup,
-            "secondary_stack_subgroup": secondary_subgroup,
-            "stack_domain": stack_domain,
-            "stack_match_count": float(sum(hit_count for _, _, _, hit_count, _ in selected_matches)),
             "stack_label_count": float(len(match_names)),
-            "stack_confidences": "|".join(confidence_parts),
-            "primary_stack_score": primary_score,
-            "primary_stack_margin": primary_margin,
-            "stack_disambiguation_notes": "|".join(notes_parts),
         })
 
     result_df = pd.DataFrame(unique_results)
@@ -468,10 +411,6 @@ def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
 
     result_columns = [
         "tech_category",
-        "tech_category_score",
-        "tech_category_score_gap",
-        "top2_category",
-        "top2_score",
     ]
 
     if df.empty:
@@ -487,10 +426,6 @@ def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
 
     # 기본값 먼저 채우기
     df["tech_category"] = "Other Tech"
-    df["tech_category_score"] = 0.0
-    df["tech_category_score_gap"] = 0.0
-    df["top2_category"] = "Other Tech"
-    df["top2_score"] = 0.0
 
     # 빈 텍스트는 분류 제외
     valid_mask = text_series.ne("")
@@ -507,10 +442,6 @@ def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
         return annotate_stack_taxonomy(df)
 
     # 중복 텍스트 제거
-    unique_texts, inverse_indices = pd.factorize(valid_texts, sort=False)
-
-    # pd.factorize는 codes, uniques 순서가 아니라 codes first가 아님에 주의
-    # 실제 반환: (codes, uniques)
     inverse_codes, unique_values = pd.factorize(valid_texts, sort=False)
     unique_text_list = unique_values.tolist()
 
@@ -583,17 +514,28 @@ def classify_subcategory(df: pd.DataFrame) -> pd.DataFrame:
 
     df = annotate_stack_taxonomy(df)
 
-    stack_category_series = df["stack_categories"].fillna("").astype(str).str.strip()
     stack_label_series = df["stack_labels"].fillna("").astype(str).str.strip()
 
-    single_stack_category_mask = stack_category_series.ne("") & ~stack_category_series.str.contains(r"\|", regex=True)
+    def _derive_stack_categories(label_text: str) -> list[str]:
+        labels = [item.strip() for item in str(label_text).split("|") if item.strip()]
+        categories = []
+        for label in labels:
+            category = STACK_ALIASES.get(label, {}).get("category", "")
+            if category and category not in categories:
+                categories.append(category)
+        return categories
+
+    derived_stack_categories = stack_label_series.apply(_derive_stack_categories)
+    derived_stack_category_text = derived_stack_categories.apply(lambda x: "|".join(x))
+
+    single_stack_category_mask = derived_stack_category_text.ne("") & ~derived_stack_category_text.str.contains(r"\|", regex=True)
     other_tech_mask = df["tech_category"].fillna("").eq("Other Tech")
 
     # 임베딩 분류가 Other Tech로 떨어졌더라도,
     # stack taxonomy에서 단일 카테고리가 명확하면 그 카테고리로 보정
     override_mask = single_stack_category_mask & other_tech_mask
 
-    df.loc[override_mask, "tech_category"] = stack_category_series.loc[override_mask]
+    df.loc[override_mask, "tech_category"] = derived_stack_category_text.loc[override_mask]
     df.loc[override_mask, "tech_category_score"] = np.maximum(
         df.loc[override_mask, "tech_category_score"].astype(float),
         0.70,
