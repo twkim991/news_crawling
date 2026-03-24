@@ -139,13 +139,13 @@ STACK_DISAMBIGUATION = {
             "django", "fastapi", "flask", "pandas", "numpy", "scipy",
             "script", "scripting", "interpreter", "jupyter", "notebook",
             "pip", "virtualenv", "poetry", "pyproject", "pytest",
-            "machine learning", "data science", "automation",
+            "machine learning", "data science",
         ],
         "negative_keywords": [
             "snake", "snakes", "venom", "venomous", "bite", "bites",
             "reptile", "reptiles", "serpent", "serpents",
             "blood", "antivenom", "species", "wildlife", "zoology",
-            "python snake", "python meat", "python skin",
+            "python snake", "python meat", "python skin", "Monty",
         ],
         "supporting_entities": ["python software foundation", "pypi", "cpython", "anaconda"],
     },
@@ -154,14 +154,12 @@ STACK_DISAMBIGUATION = {
         "requires_context": True,
         "context_keywords": [
             "reactjs", "react.js", "react native", "jsx", "tsx",
-            "component", "components", "hook", "hooks",
-            "frontend", "front-end", "ui", "state", "props",
-            "vite", "next.js", "spa", "web app",
+            "react native", "vite", "frontend", "front-end", "next.js", "web app", "npm", 
         ],
         "negative_keywords": [
             "reacts", "reacted", "reacting", "reaction", "reactions",
             "reactor", "reactors", "react to", "market reacts",
-            "fans react", "people react", "overreact", "interactive",
+            "fans react", "people react", "overreact", "interactive", "reacts with", "reacts to", "reacted to", "reacting to", "people react", "fans react", "overreact", "interactive",
         ],
         "supporting_entities": ["meta", "reactjs", "react native", "jsx"],
     },
@@ -175,7 +173,7 @@ STACK_DISAMBIGUATION = {
         "negative_keywords": [
             "rocket launch", "rocket launches", "rocket attack", "rocket fire",
             "missile", "missiles", "spacex", "nasa", "orbital", "booster",
-            "spacecraft", "launch vehicle",
+            "spacecraft", "launch vehicle", "space X",
         ],
         "supporting_entities": ["rocket.rs", "rust foundation", "crates.io"],
     },
@@ -254,7 +252,7 @@ STACK_DISAMBIGUATION = {
         ],
         "negative_keywords": [
             "express delivery", "express train", "express bus", "expressway", "express lane", "courier",
-            "parcel", "shipping",
+            "parcel", "shipping", "train", "subway", "pharmacy", "delivery", "delivering", "panda express", "Gazeta Express",
         ],
         "supporting_entities": ["node.js", "npm", "javascript"],
     },
@@ -300,6 +298,16 @@ STACK_DISAMBIGUATION = {
         ],
         "negative_keywords": ["franz kafka", "novel", "novelist", "literature", "writer"],
         "supporting_entities": ["apache", "confluent"],
+    },
+    "PHP": {
+        "ambiguous": True,
+        "requires_context": False,
+        "context_keywords": [
+            "php", "php language", "php runtime", "php package", "php framework",
+            "laravel", "symfony", "codeigniter", "cakephp",
+        ],
+        "negative_keywords": ["Partial Hospitalization Program", "public housing program", "personal health plan"],
+        "supporting_entities": ["Laravel", "Symfony", "CodeIgniter", "CakePHP"],
     },
 }
 
