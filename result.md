@@ -256,18 +256,118 @@ trend_score_30 = min(trend_score_raw, 30)
 - `event_score`: 릴리즈 / 패치 / 업그레이드 / 마이그레이션 등 이벤트성 기사 비중
 - `confidence_score`: binary classifier가 해당 기사들을 기술 뉴스답게 본 정도
 
-### Weighting Rule
+---
 
-다중 스택 기사로 인해 볼륨이 과도하게 부풀지 않도록 가중치를 나눠 반영한다.
-
-예시:
+## 0. 전체 계산 흐름 요약
 
 ```text
-Article: Python|FastAPI
-stack_count_for_weight = 2
-→ Python: 0.5
-→ FastAPI: 0.5
+   trend_score_raw = share_score + volume_score + event_score + confidence_score
+
+   trend_score_30 = min(trend_score_raw, 30)
 ```
+
+---
+
+## 1. share_score (점유율 점수)
+
+해당 기간 동안 전체 기사 대비 특정 스택이 차지하는 비율이다.
+
+```text
+share_ratio = weighted_article_sum / 전체 스택 기사 총합
+share_score = log1p(share_ratio * 100) * 2
+```
+
+### 왜 필요한가
+
+- 단순 기사 수가 아니라 **시장 내 점유율**을 반영
+- 특정 기간에 특정 기술이 얼마나 “비중 있게 등장했는지” 측정
+
+---
+
+## 1-1. weighted_article_sum (중요 개념)
+
+다중 스택 기사로 인해 볼륨이 과도하게 증가하는 것을 방지하기 위한 가중치이다.
+
+### 공식
+
+```text
+weight = 1 / number_of_stacks
+```
+
+### 왜 필요한가
+
+- 하나의 기사가 여러 스택을 동시에 부풀리는 문제 방지
+- 트렌드 왜곡 방지
+
+---
+
+## 2. volume_score (기사량 점수)
+
+해당 스택이 얼마나 많이 언급되었는지를 반영한다.
+
+```text
+volume_score = log1p(해당 스택 기사 수) * 2
+```
+
+### 왜 필요한가
+
+- 로그를 쓰는 이유는 **과도한 기사 수 폭증을 완화**하기 위함
+- 점유율만 보면 전체 기사량이 적은 날에 왜곡됨
+- 절대적인 관심도(언급량)를 함께 반영
+
+---
+
+## 3. event_score (이벤트 점수)
+
+릴리즈, 업데이트, 패치, 마이그레이션 같은 **실제 기술 이벤트 발생 여부**를 반영한다.
+
+```text
+event_ratio = 이벤트 키워드 포함 기사 수 / 이벤트 기사 비율
+event_score = event_ratio * 2
+```
+
+### 이벤트 키워드 예시
+
+```text
+release, launch, update, upgrade, patch, migrate, rollout
+```
+
+### 왜 필요한가
+
+- 단순 언급이 아니라 **실제 변화가 있는 기술**을 강조
+- 트렌드 상승 신호를 잡기 위한 지표
+
+---
+
+## 4. confidence_score (품질 점수)
+
+해당 기사들이 얼마나 “기술 뉴스다운지”를 반영한다.
+
+```text
+confidence_score = binary classifier 평균 확률 * 2
+```
+
+### 왜 필요한가
+
+- 노이즈 기사 제거
+- 기술 관련성이 높은 기사일수록 점수 상승
+
+---
+
+## 8. 설계 의도 요약
+
+이 트렌드 점수는 아래 4가지를 동시에 반영한다.
+
+- **시장 점유율** (share)
+- **절대 언급량** (volume)
+- **실제 기술 이벤트 발생 여부** (event)
+- **기사의 기술 관련성 품질** (confidence)
+
+즉 단순 “기사 많이 나온 기술”이 아니라,
+
+> 실제로 의미 있는 변화가 있고, 시장에서 비중 있게 언급되며, 기술적으로 확실한 뉴스
+
+를 높은 점수로 만들기 위한 구조다.
 
 ---
 
