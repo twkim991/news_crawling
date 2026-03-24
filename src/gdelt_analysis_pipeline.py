@@ -456,10 +456,6 @@ def _explode_tracked_articles(tracked_df: pd.DataFrame) -> pd.DataFrame:
 def _period_activity_ref(period_type: str) -> int:
     if period_type == "daily":
         return 5
-    if period_type == "weekly":
-        return 20
-    if period_type == "monthly":
-        return 60
     raise ValueError(f"unknown period_type: {period_type}")
 
 
@@ -607,51 +603,46 @@ def _build_period_score_rows(
     return merged[ordered_cols]
 
 
-def _build_stack_trend_scores(tracked_df: pd.DataFrame) -> pd.DataFrame:
+def _build_daily_stack_trend_scores(tracked_df: pd.DataFrame) -> pd.DataFrame:
     exploded = _explode_tracked_articles(tracked_df)
+
+    empty_columns = [
+        "period_type",
+        "period_value",
+        "stack_category",
+        "stack_subgroup",
+        "stack_name",
+        "article_count",
+        "unique_article_count",
+        "weighted_article_sum",
+        "period_total_weight",
+        "share_ratio",
+        "avg_binary_score",
+        "event_hit_count",
+        "event_ratio",
+        "share_score",
+        "volume_score",
+        "event_score",
+        "confidence_score",
+        "trend_score_raw",
+        "trend_score_30",
+        "previous_trend_score_30",
+        "score_delta",
+        "score_delta_pct",
+    ]
+
     if exploded.empty:
-        return pd.DataFrame(columns=[
-            "period_type",
-            "period_value",
-            "stack_category",
-            "stack_subgroup",
-            "stack_name",
-            "article_count",
-            "unique_article_count",
-            "weighted_article_sum",
-            "period_total_weight",
-            "share_ratio",
-            "avg_binary_score",
-            "event_hit_count",
-            "event_ratio",
-            "share_score",
-            "volume_score",
-            "event_score",
-            "confidence_score",
-            "trend_score_raw",
-            "trend_score_30",
-            "previous_trend_score_30",
-            "score_delta",
-            "score_delta_pct",
-        ])
+        return pd.DataFrame(columns=empty_columns)
 
-    daily = _build_period_score_rows(exploded, "article_date", "daily")
-    weekly = _build_period_score_rows(exploded, "article_week", "weekly")
-    monthly = _build_period_score_rows(exploded, "article_month", "monthly")
+    daily = _build_period_score_rows(exploded, "article_date", "daily").copy()
 
-    result = pd.concat([daily, weekly, monthly], ignore_index=True)
-
-    period_order = pd.Categorical(
-        result["period_type"],
-        categories=["daily", "weekly", "monthly"],
-        ordered=True,
-    )
-    result["period_type"] = period_order
+    if daily.empty:
+        return pd.DataFrame(columns=empty_columns)
 
     return (
-        result.sort_values(
-            ["period_type", "period_value", "trend_score_30", "stack_name"],
-            ascending=[True, True, False, True],
+        daily.sort_values(
+            ["period_value", "trend_score_30", "stack_name"],
+            ascending=[True, False, True],
         )
         .reset_index(drop=True)
     )
@@ -733,7 +724,7 @@ def run_gdelt_analysis(
         full_classified_df["tech_bucket"] != "Other Tech"
     ].copy()
 
-    stack_trend_scores_df = _build_stack_trend_scores(tracked_only_df)
+    daily_stack_trend_scores_df = _build_daily_stack_trend_scores(tracked_only_df)
 
     full_output_path = os.path.join(
         output_dir,
@@ -745,7 +736,7 @@ def run_gdelt_analysis(
     )
     trend_output_path = os.path.join(
         output_dir,
-        f"{output_prefix}_stack_trend_scores.csv",
+        f"{output_prefix}_daily_stack_trend_scores.csv",
     )
     debug_output_path = os.path.join(
         output_dir,
@@ -787,7 +778,7 @@ def run_gdelt_analysis(
 
     full_classified_df.to_csv(full_output_path, index=False, encoding="utf-8-sig")
     tracked_only_df.to_csv(tracked_output_path, index=False, encoding="utf-8-sig")
-    stack_trend_scores_df.to_csv(trend_output_path, index=False, encoding="utf-8-sig")
+    daily_stack_trend_scores_df.to_csv(trend_output_path, index=False, encoding="utf-8-sig")
     debug_df.to_csv(debug_output_path, index=False, encoding="utf-8-sig")
 
     print("\nSaved:", full_output_path)
@@ -797,7 +788,8 @@ def run_gdelt_analysis(
     return {
         "classified_all": full_classified_df,
         "classified_tracked_only": tracked_only_df,
-        "stack_trend_scores": stack_trend_scores_df,
+        "daily_stack_trend_scores": daily_stack_trend_scores_df,
+        "classified_debug": debug_df,
     }
 
 

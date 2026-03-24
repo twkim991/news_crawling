@@ -11,8 +11,12 @@ from urllib.parse import urlparse
 
 import pandas as pd
 import requests
+import time
 
 from src.common import preprocess_news_df
+
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 RAW_DIR = os.path.join("data", "raw")
 PROCESSED_DIR = os.path.join("data", "processed")
@@ -235,15 +239,25 @@ def list_gkg_file_urls(start_datetime: str, end_datetime: str, max_files: int | 
 
 
 def _parse_tsv_text(decoded_text: str) -> pd.DataFrame:
-    return pd.read_csv(
-        io.StringIO(decoded_text),
-        sep="\t",
-        names=GKG_COLUMNS,
-        dtype=str,
-        keep_default_na=False,
-        on_bad_lines="skip",
-        engine="python",
-    )
+    try:
+        return pd.read_csv(
+            io.StringIO(decoded_text),
+            sep="\t",
+            names=GKG_COLUMNS,
+            dtype=str,
+            keep_default_na=False,
+            on_bad_lines="skip",
+        )
+    except Exception:
+        return pd.read_csv(
+            io.StringIO(decoded_text),
+            sep="\t",
+            names=GKG_COLUMNS,
+            dtype=str,
+            keep_default_na=False,
+            on_bad_lines="skip",
+            engine="python",
+        )
 
 
 def _decode_gkg_bytes(raw_bytes: bytes) -> tuple[str, str, str]:
@@ -291,43 +305,54 @@ def _shrink_gkg_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return frame[available].copy()
 
 
-def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
+def _download_one_gkg(row) -> tuple[pd.DataFrame | None, dict | None, bool]:
+    session = requests.Session()
+    try:
+        response = session.get(row.file_url, timeout=120)
+        response.raise_for_status()
+
+        frame, decode_meta = _read_zipped_tsv(response.content)
+        frame = _shrink_gkg_frame(frame)
+
+        frame["file_timestamp"] = row.file_timestamp
+        frame["file_url"] = row.file_url
+        frame["decoded_encoding"] = decode_meta["encoding"]
+        frame["decode_errors"] = decode_meta["errors"]
+
+        used_fallback = not (
+            decode_meta["encoding"] == "utf-8"
+            and decode_meta["errors"] == "strict"
+        )
+        return frame, None, used_fallback
+
+    except Exception as exc:
+        return None, {
+            "file_timestamp": row.file_timestamp,
+            "file_url": row.file_url,
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        }, False
+
+
+def download_gkg_files(file_index_df: pd.DataFrame, max_workers: int = 6) -> tuple[pd.DataFrame, list[dict]]:
     frames: list[pd.DataFrame] = []
     failures: list[dict] = []
     fallback_count = 0
 
-    for row in file_index_df.itertuples(index=False):
-        print(f"[GDELT GKG] download {row.file_timestamp} {row.file_url}")
+    rows = list(file_index_df.itertuples(index=False))
 
-        try:
-            response = requests.get(row.file_url, timeout=120)
-            response.raise_for_status()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_download_one_gkg, row) for row in rows]
 
-            frame, decode_meta = _read_zipped_tsv(response.content)
-            frame = _shrink_gkg_frame(frame)
+        for future in as_completed(futures):
+            frame, failure, used_fallback = future.result()
 
-            frame["file_timestamp"] = row.file_timestamp
-            frame["file_url"] = row.file_url
-            frame["decoded_encoding"] = decode_meta["encoding"]
-            frame["decode_errors"] = decode_meta["errors"]
-
-            frames.append(frame)
-
-            if not (decode_meta["encoding"] == "utf-8" and decode_meta["errors"] == "strict"):
-                fallback_count += 1
-                print(
-                    "[GDELT GKG] decode fallback "
-                    f"encoding={decode_meta['encoding']} errors={decode_meta['errors']} member={decode_meta['archive_member']}"
-                )
-
-        except Exception as exc:
-            failures.append({
-                "file_timestamp": row.file_timestamp,
-                "file_url": row.file_url,
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-            })
-            print(f"[GDELT GKG] skip failed file {row.file_timestamp}: {type(exc).__name__}: {exc}")
+            if frame is not None:
+                frames.append(frame)
+                if used_fallback:
+                    fallback_count += 1
+            elif failure is not None:
+                failures.append(failure)
 
     print(f"[GDELT GKG] downloaded={len(frames)} failed={len(failures)} decode_fallbacks={fallback_count}")
 
@@ -338,77 +363,129 @@ def download_gkg_files(file_index_df: pd.DataFrame) -> tuple[pd.DataFrame, list[
     return pd.concat(frames, ignore_index=True), failures
 
 
-def _build_keyword_pattern(keyword: str) -> str:
-    normalized = keyword.lower().strip()
-    escaped = re.escape(normalized).replace(r"\ ", r"\s+")
-    if re.fullmatch(r"[a-z0-9\.\+#\-\s]+", normalized):
-        return rf"(?<![a-z0-9]){escaped}(?![a-z0-9])"
-    return escaped
-
-
-def _build_tech_keyword_regex(extra_keywords: list[str] | None = None) -> re.Pattern[str]:
+def _split_tech_keywords(extra_keywords: list[str] | None = None) -> tuple[list[str], list[str]]:
     keywords = list(DEFAULT_TECH_KEYWORDS)
     if extra_keywords:
         keywords.extend([keyword.strip() for keyword in extra_keywords if keyword.strip()])
 
-    unique_keywords = sorted({k.lower().strip() for k in keywords if k.strip()}, key=len, reverse=True)
-    parts = [_build_keyword_pattern(keyword) for keyword in unique_keywords]
+    simple_keywords: list[str] = []
+    regex_keywords: list[str] = []
+
+    for keyword in sorted({k.lower().strip() for k in keywords if k.strip()}, key=len, reverse=True):
+        # 영문/숫자/기호 조합처럼 경계 처리가 필요한 것만 regex로 보낸다.
+        if re.fullmatch(r"[a-z0-9\.\+#\-\s]+", keyword):
+            regex_keywords.append(keyword)
+        else:
+            simple_keywords.append(keyword)
+
+    return simple_keywords, regex_keywords
+
+
+def _build_keyword_pattern(keyword: str) -> str:
+    normalized = keyword.lower().strip()
+    escaped = re.escape(normalized).replace(r"\ ", r"\s+")
+    return rf"(?<![a-z0-9]){escaped}(?![a-z0-9])"
+
+
+def _build_tech_keyword_regex(extra_keywords: list[str] | None = None) -> re.Pattern[str] | None:
+    _, regex_keywords = _split_tech_keywords(extra_keywords)
+    if not regex_keywords:
+        return None
+
+    parts = [_build_keyword_pattern(keyword) for keyword in regex_keywords]
     return re.compile("|".join(parts), re.IGNORECASE)
+
+def _contains_simple_keywords(series: pd.Series, keywords: list[str]) -> pd.Series:
+    result = pd.Series(False, index=series.index)
+    if not keywords:
+        return result
+
+    lowered = series.str.lower()
+    for keyword in keywords:
+        result |= lowered.str.contains(keyword, regex=False, na=False)
+
+    return result
 
 
 def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None = None) -> pd.DataFrame:
     if df.empty:
         return df.copy()
 
+    simple_keywords, _ = _split_tech_keywords(extra_keywords)
     tech_re = _build_tech_keyword_regex(extra_keywords)
-    working = df.copy()
 
     target_columns = [
         "enhanced_themes",
         "themes",
-        "v2_organizations",
-        "organizations",
         "document_identifier",
         "source_common_name",
+        "v2_organizations",
+        "organizations",
     ]
 
-    combined_mask = pd.Series(False, index=working.index)
+    combined_mask = pd.Series(False, index=df.index)
 
     print("[filter_tech_gkg_records] start")
-    print("[filter_tech_gkg_records] total rows:", len(working))
+    print("[filter_tech_gkg_records] total rows:", len(df))
 
     for column in target_columns:
-        if column not in working.columns:
+        if column not in df.columns:
             print(f"[filter_tech_gkg_records] skip missing column: {column}")
             continue
 
-        series = working[column].fillna("").astype(str)
+        remaining_mask = ~combined_mask
+        if not remaining_mask.any():
+            print("[filter_tech_gkg_records] all rows already decided, stop early")
+            break
 
-        if series.eq("").all():
-            print(f"[filter_tech_gkg_records] skip empty column: {column}")
+        series = df.loc[remaining_mask, column].fillna("").astype(str)
+        series = series[series.str.len() >= 3]
+
+        if column == "enhanced_themes":
+            # 기술 관련 주제어가 아예 없는 행은 먼저 버린다.
+            prefilter = (
+                series.str.contains("tech", case=False, regex=False, na=False)
+                | series.str.contains("software", case=False, regex=False, na=False)
+                | series.str.contains("internet", case=False, regex=False, na=False)
+                | series.str.contains("artificial intelligence", case=False, regex=False, na=False)
+                | series.str.contains("cyber", case=False, regex=False, na=False)
+                | series.str.contains("cloud", case=False, regex=False, na=False)
+                | series.str.contains("data", case=False, regex=False, na=False)
+            )
+            series = series.loc[prefilter]
+
+        if series.empty:
+            print(f"[filter_tech_gkg_records] skip empty/short column: {column}")
             continue
 
-        column_mask = series.str.contains(tech_re, na=False)
-        matched_count = int(column_mask.sum())
+        # 1차: 빠른 단순 검색
+        simple_mask = _contains_simple_keywords(series, simple_keywords)
+
+        # 2차: 아직 안 잡힌 행만 regex
+        regex_mask = pd.Series(False, index=series.index)
+        if tech_re is not None:
+            unresolved = series.loc[~simple_mask]
+            if not unresolved.empty:
+                regex_mask.loc[unresolved.index] = unresolved.str.contains(tech_re, na=False)
+
+        matched_subset = simple_mask | regex_mask
+
+        column_mask = pd.Series(False, index=df.index)
+        column_mask.loc[matched_subset.index] = matched_subset
+        combined_mask |= column_mask
 
         print(
             f"[filter_tech_gkg_records] column={column} "
-            f"matched_rows={matched_count}"
+            f"checked_rows={len(series)} "
+            f"matched_rows={int(matched_subset.sum())}"
         )
 
-        combined_mask = combined_mask | column_mask
-
-    working["is_tech_candidate"] = combined_mask
-    filtered = working.loc[working["is_tech_candidate"]].copy()
-
-    print("[filter_tech_gkg_records] filtered rows:", len(filtered))
-
+    filtered = df.loc[combined_mask]
     deduped = filtered.drop_duplicates(
         subset=["gkg_record_id", "document_identifier", "file_timestamp"]
     ).copy()
 
     print("[filter_tech_gkg_records] deduped rows:", len(deduped))
-
     return deduped
 
 
@@ -481,8 +558,6 @@ def normalize_gkg_df(df: pd.DataFrame) -> pd.DataFrame:
         inferred_title.where(inferred_title.ne(""), fallback_title),
     )
 
-    print(normalized[["url", "title"]].head(10).to_dict(orient="records"))
-
     normalized["description"] = normalized["themes"]
     normalized["content"] = normalized["organizations"]
 
@@ -514,13 +589,17 @@ def run_gdelt_collection(
     print("start:", start_datetime)
     print("end  :", end_datetime)
 
+    t0 = time.perf_counter()
     file_index_df = list_gkg_file_urls(
         start_datetime,
         end_datetime,
         max_files=max_files,
     )
+    print(f"[TIME] list_gkg_file_urls: {time.perf_counter() - t0:.2f}s")
 
+    t1 = time.perf_counter()
     raw_df, failures = download_gkg_files(file_index_df)
+    print(f"[TIME] download_gkg_files: {time.perf_counter() - t1:.2f}s")
 
     if raw_output:
         raw_df.to_csv(raw_output, index=False, encoding="utf-8-sig")
@@ -528,9 +607,17 @@ def run_gdelt_collection(
     if failure_log:
         _write_failure_report(failures, failure_log)
 
+    t2 = time.perf_counter()
     tech_raw_df = filter_tech_gkg_records(raw_df, extra_keywords=extra_keywords)
+    print(f"[TIME] filter_tech_gkg_records: {time.perf_counter() - t2:.2f}s")
+
+    t3 = time.perf_counter()
     normalized = normalize_gkg_df(tech_raw_df)
+    print(f"[TIME] normalize_gkg_df: {time.perf_counter() - t3:.2f}s")
+
+    t4 = time.perf_counter()
     processed = preprocess_news_df(normalized)
+    print(f"[TIME] preprocess_news_df: {time.perf_counter() - t4:.2f}s")
 
     if processed_output:
         processed.to_csv(processed_output, index=False, encoding="utf-8-sig")

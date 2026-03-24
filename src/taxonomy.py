@@ -213,7 +213,7 @@ STACK_DISAMBIGUATION = {
             "app store", "objective-c", "cocoa",
         ],
         "negative_keywords": [
-            "taylor swift", "swiftly", "singer", "album", "concert", "tour", "fans", "bird", "birds",
+            "taylor swift", "swiftly", "singer", "album", "concert", "tour", "fans", "bird", "birds", "SwiftCurrentOnline.com"
         ],
         "supporting_entities": ["apple", "swiftui", "xcode"],
     },
@@ -226,7 +226,7 @@ STACK_DISAMBIGUATION = {
         ],
         "negative_keywords": [
             "sparked", "sparks", "spark interest", "spark debate", "ignite", "ignited", "romance",
-            "chemistry", "wildfire",
+            "chemistry", "wildfire", "spark driver"
         ],
         "supporting_entities": ["apache", "databricks"],
     },
@@ -251,8 +251,8 @@ STACK_DISAMBIGUATION = {
             "typescript", "http server",
         ],
         "negative_keywords": [
-            "express delivery", "express train", "express bus", "expressway", "express lane", "courier",
-            "parcel", "shipping", "train", "subway", "pharmacy", "delivery", "delivering", "panda express", "Gazeta Express",
+            "express delivery", "express train", "express bus", "expressway", "express lane", "courier", "air express", "bank", "adobe express", "adobe", "fedex", "ups",
+            "parcel", "shipping", "train", "trains", "subway", "subways", "pharmacy", "delivery", "delivering", "panda express", "Gazeta Express", "lbc express", "dhl express",
         ],
         "supporting_entities": ["node.js", "npm", "javascript"],
     },
