@@ -2,6 +2,7 @@ numpy
 pandas
 requests
 python-dotenv
+psycopg2-binary
 joblib
 scikit-learn
 sentence-transformers
