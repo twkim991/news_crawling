@@ -13,6 +13,8 @@ from src.gdelt_analysis_pipeline import run_gdelt_analysis
 from src.newsapi_pipeline import run_newsapi_collection
 from src.newsapi_analysis_pipeline import run_newsapi_analysis
 
+SCORE_DECIMALS = 3
+
 
 def _resolve_default_run_date() -> str:
     now_utc = datetime.now(timezone.utc)
@@ -71,7 +73,7 @@ def _safe_read_csv(path: str) -> pd.DataFrame | None:
 
 def _build_14d_final_trend_scores(
     run_date: str,
-    lookback_days: int = 14,
+    lookback_days: int = 7,
     output_dir: str = "outputs/final",
 ) -> str:
     os.makedirs(output_dir, exist_ok=True)
@@ -109,7 +111,7 @@ def _build_14d_final_trend_scores(
 
     output_path = os.path.join(
         output_dir,
-        f"final_14d_stack_trend_scores_{_date_to_suffix(run_date)}.csv",
+        f"final_7d_stack_trend_scores_{_date_to_suffix(run_date)}.csv",
     )
 
     if not collected_frames:
@@ -184,16 +186,16 @@ def _build_14d_final_trend_scores(
     # 기존 daily=5, weekly=20, monthly=60 사이의 중간값 성격으로 30 사용.
     volume_ref = 30.0
 
-    grouped["share_score"] = (grouped["share_ratio"] * 18.0).round(4)
+    grouped["share_score"] = (grouped["share_ratio"] * 18.0).round(SCORE_DECIMALS)
     grouped["volume_score"] = (
         np.minimum(grouped["article_count"] / volume_ref, 1.0) * 8.0
-    ).round(4)
+    ).round(SCORE_DECIMALS)
     grouped["event_score"] = (
         np.minimum(grouped["event_ratio"], 1.0) * 2.0
-    ).round(4)
+    ).round(SCORE_DECIMALS)
     grouped["confidence_score"] = (
         np.minimum(grouped["avg_binary_score"], 1.0) * 2.0
-    ).round(4)
+    ).round(SCORE_DECIMALS)
 
     grouped["trend_score_raw"] = (
         grouped["share_score"]
@@ -201,7 +203,7 @@ def _build_14d_final_trend_scores(
         + grouped["event_score"]
         + grouped["confidence_score"]
     )
-    grouped["trend_score_30"] = grouped["trend_score_raw"].clip(upper=30.0).round(2)
+    grouped["trend_score_30"] = grouped["trend_score_raw"].clip(upper=30.0).round(14)
 
     grouped["previous_trend_score_30"] = np.nan
     grouped["score_delta"] = np.nan
@@ -319,7 +321,7 @@ def run_daily_pipeline(run_date: str):
     print("\n[STEP 5] FINAL 14-DAY TREND AGGREGATION")
     final_output_path = _build_14d_final_trend_scores(
         run_date=run_date,
-        lookback_days=14,
+        lookback_days=7,
         output_dir="outputs/final",
     )
 

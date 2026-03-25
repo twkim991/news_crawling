@@ -17,6 +17,7 @@ OUTPUT_DIR = "outputs"
 BINARY_MODEL_PATH = os.path.join("models", "ag_binary_logreg.joblib")
 BINARY_BATCH_SIZE = 64
 BINARY_THRESHOLD = 0.45
+SCORE_DECIMALS = 3
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -551,16 +552,16 @@ def _build_period_score_rows(
 
     activity_ref = _period_activity_ref(period_type)
 
-    merged["share_score"] = (merged["share_ratio"] * 18.0).round(4)
+    merged["share_score"] = (merged["share_ratio"] * 18.0).round(SCORE_DECIMALS)
     merged["volume_score"] = (
         np.minimum(merged["article_count"] / activity_ref, 1.0) * 8.0
-    ).round(4)
+    ).round(SCORE_DECIMALS)
     merged["event_score"] = (
         np.minimum(merged["event_ratio"], 1.0) * 2.0
-    ).round(4)
+    ).round(SCORE_DECIMALS)
     merged["confidence_score"] = (
         np.minimum(merged["avg_binary_score"], 1.0) * 2.0
-    ).round(4)
+    ).round(SCORE_DECIMALS)
 
     merged["trend_score_raw"] = (
         merged["share_score"]
@@ -568,7 +569,7 @@ def _build_period_score_rows(
         + merged["event_score"]
         + merged["confidence_score"]
     )
-    merged["trend_score_30"] = merged["trend_score_raw"].clip(upper=30.0).round(2)
+    merged["trend_score_30"] = merged["trend_score_raw"].clip(upper=30.0).round(SCORE_DECIMALS)
     merged["period_type"] = period_type
 
     merged = merged.sort_values(["stack_name", "period_value"]).reset_index(drop=True)
@@ -577,14 +578,14 @@ def _build_period_score_rows(
     )
     merged["score_delta"] = (
         merged["trend_score_30"] - merged["previous_trend_score_30"]
-    ).round(2)
+    ).round(SCORE_DECIMALS)
     merged["score_delta_pct"] = np.where(
         merged["previous_trend_score_30"].fillna(0) > 0,
         (
             (merged["trend_score_30"] - merged["previous_trend_score_30"])
             / merged["previous_trend_score_30"]
             * 100.0
-        ).round(2),
+        ).round(SCORE_DECIMALS),
         np.nan,
     )
 
