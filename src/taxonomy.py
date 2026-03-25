@@ -62,7 +62,7 @@ TECH_STACK_TAXONOMY = {
                 "Flask": ["flask"],
                 "NestJS": ["nestjs", "nest.js", "nest js", "네스트js"],
                 "Axum": ["axum"],
-                "Actix-Web": ["actix-web", "actix web", "actix_web"],
+                "Actix Web": ["actix-web", "actix web", "actix_web"],
                 "Rocket": ["rocket", "rocket.rs", "rocket framework"],
                 "Bun": ["bun", "bun.sh"],
                 "Prisma": ["prisma", "prisma orm"],

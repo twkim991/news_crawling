@@ -14,9 +14,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_CONFIG = os.getenv("DB_CONFIG")
+DB_CONFIG = {
+    "host": os.getenv("DB_HOST"),
+    "port": int(os.getenv("DB_PORT")),
+    "dbname": os.getenv("DB_NAME"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+}
 FINAL_DIR = "outputs/final"
-FILE_DATE_PATTERN = re.compile(r"final_14d_stack_trend_scores_(\d{4}_\d{2}_\d{2})\.csv$")
+FILE_DATE_PATTERN = re.compile(r"final_7d_stack_trend_scores_(\d{4}_\d{2}_\d{2})\.csv$")
 SCORE_QUANT = Decimal("0.001")
 
 
@@ -150,7 +156,7 @@ def process_one_file(conn, file_path: str, stack_name_to_id: dict[str, int]):
 
 
 def get_final_csv_files():
-    pattern = os.path.join(FINAL_DIR, "final_14d_stack_trend_scores_*.csv")
+    pattern = os.path.join(FINAL_DIR, "final_7d_stack_trend_scores_*.csv")
     return sorted(glob.glob(pattern))
 
 
@@ -159,7 +165,8 @@ def main():
     if not files:
         print("[LOAD] no final csv files found")
         return
-
+    print("ENV PATH:", os.getcwd())
+    print("DB_CONFIG ENV:", os.getenv("DB_HOST"))
     conn = psycopg2.connect(**DB_CONFIG)
 
     try:
