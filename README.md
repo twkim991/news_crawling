@@ -68,7 +68,7 @@ python -m pip install -r requirements.txt
 기본 import 검증
 
 ```text
-python -c "import dotenv, joblib, numpy, pandas, requests, sentence_transformers, sklearn, torch; print('imports ok')"
+python -c "import dotenv, joblib, numpy, pandas, psycopg2, requests, sentence_transformers, sklearn, torch; print('imports ok')"
 
 ```
 
