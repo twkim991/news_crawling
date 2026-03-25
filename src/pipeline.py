@@ -13,6 +13,14 @@ from src.gdelt_analysis_pipeline import run_gdelt_analysis
 from src.newsapi_pipeline import run_newsapi_collection
 from src.newsapi_analysis_pipeline import run_newsapi_analysis
 
+from src.geeknews_pipeline import run_geeknews_collection
+from src.geeknews_analysis_pipeline import run_geeknews_analysis
+
+
+from src.ssafy_dataset_pipeline import run_ssafy_dataset_collection
+from src.ssafy_dataset_analysis_pipeline import run_ssafy_dataset_analysis
+
+
 SCORE_DECIMALS = 3
 
 
@@ -93,6 +101,14 @@ def _build_14d_final_trend_scores(
             (
                 "gdelt",
                 f"outputs/gdelt/{target_suffix}/gdelt_{target_suffix}_daily_stack_trend_scores.csv",
+            ),
+            (
+                "geeknews",
+                f"outputs/geeknews/{target_suffix}/geeknews_{target_suffix}_daily_stack_trend_scores.csv",
+            ),
+            (
+                "ssafy_dataset",
+                f"outputs/ssafy_dataset/{target_suffix}/ssafy_dataset_{target_suffix}_daily_stack_trend_scores.csv",
             ),
         ]
 
@@ -316,9 +332,61 @@ def run_daily_pipeline(run_date: str):
 
 
     # -----------------------------
-    # 5. 최근 14일 최종 트렌드 점수 생성
+    # 5. GeekNews 수집
     # -----------------------------
-    print("\n[STEP 5] FINAL 14-DAY TREND AGGREGATION")
+    geeknews_raw_path = f"data/raw/geeknews_raw_{suffix}.csv"
+    geeknews_processed_path = f"data/processed/geeknews_processed_{suffix}.csv"
+
+    print("\n[STEP 5] GEEKNEWS COLLECTION")
+    run_geeknews_collection(
+        run_date=run_date,
+        raw_dir="data/raw",
+        raw_output=geeknews_raw_path,
+        processed_output=geeknews_processed_path,
+    )
+
+    # -----------------------------
+    # 6. GeekNews 분석
+    # -----------------------------
+    geeknews_output_dir = f"outputs/geeknews/{suffix}"
+
+    print("\n[STEP 6] GEEKNEWS ANALYSIS")
+    run_geeknews_analysis(
+        input_path=geeknews_processed_path,
+        output_dir=geeknews_output_dir,
+        output_prefix=f"geeknews_{suffix}",
+    )
+
+    # # -----------------------------
+    # # 7. SSAFY Dataset 수집
+    # # -----------------------------
+    # ssafy_raw_path = f"data/raw/ssafy_dataset_raw_{suffix}.csv"
+    # ssafy_processed_path = f"data/processed/ssafy_dataset_processed_{suffix}.csv"
+
+    # print("\n[STEP 7] SSAFY DATASET COLLECTION")
+    # run_ssafy_dataset_collection(
+    #     run_date=run_date,
+    #     raw_dir="data/raw",
+    #     raw_output=ssafy_raw_path,
+    #     processed_output=ssafy_processed_path,
+    # )
+
+    # # -----------------------------
+    # # 8. SSAFY Dataset 분석
+    # # -----------------------------
+    # ssafy_output_dir = f"outputs/ssafy_dataset/{suffix}"
+
+    # print("\n[STEP 8] SSAFY DATASET ANALYSIS")
+    # run_ssafy_dataset_analysis(
+    #     input_path=ssafy_processed_path,
+    #     output_dir=ssafy_output_dir,
+    #     output_prefix=f"ssafy_dataset_{suffix}",
+    # )
+
+    # -----------------------------
+    # 9. 최근 14일 최종 트렌드 점수 생성
+    # -----------------------------
+    print("\n[STEP 9] FINAL 14-DAY TREND AGGREGATION")
     final_output_path = _build_14d_final_trend_scores(
         run_date=run_date,
         lookback_days=7,
