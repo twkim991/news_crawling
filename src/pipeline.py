@@ -301,34 +301,34 @@ def run_daily_pipeline(run_date: str):
         output_prefix=f"gdelt_{suffix}",
     )
 
-    # -----------------------------
-    # 3. NewsAPI 수집
-    # -----------------------------
-    newsapi_raw_path = f"data/raw/newsapi_raw_{suffix}.csv"
-    newsapi_processed_path = f"data/processed/newsapi_processed_{suffix}.csv"
+    # # -----------------------------
+    # # 3. NewsAPI 수집
+    # # -----------------------------
+    # newsapi_raw_path = f"data/raw/newsapi_raw_{suffix}.csv"
+    # newsapi_processed_path = f"data/processed/newsapi_processed_{suffix}.csv"
 
-    print("\n[STEP 3] NEWSAPI COLLECTION")
-    run_newsapi_collection(
-        from_date=run_date,
-        to_date=run_date,
-        page_size=100,
-        max_pages=1,
-        raw_output=newsapi_raw_path,
-        output_path=newsapi_processed_path,
-        continue_on_error=False,
-    )
+    # print("\n[STEP 3] NEWSAPI COLLECTION")
+    # run_newsapi_collection(
+    #     from_date=run_date,
+    #     to_date=run_date,
+    #     page_size=100,
+    #     max_pages=1,
+    #     raw_output=newsapi_raw_path,
+    #     output_path=newsapi_processed_path,
+    #     continue_on_error=False,
+    # )
 
-    # -----------------------------
-    # 4. NewsAPI 분석
-    # -----------------------------
-    newsapi_output_dir = f"outputs/newsapi/{suffix}"
+    # # -----------------------------
+    # # 4. NewsAPI 분석
+    # # -----------------------------
+    # newsapi_output_dir = f"outputs/newsapi/{suffix}"
 
-    print("\n[STEP 4] NEWSAPI ANALYSIS")
-    run_newsapi_analysis(
-        input_path=newsapi_processed_path,
-        output_dir=newsapi_output_dir,
-        output_prefix=f"newsapi_{suffix}",
-    )
+    # print("\n[STEP 4] NEWSAPI ANALYSIS")
+    # run_newsapi_analysis(
+    #     input_path=newsapi_processed_path,
+    #     output_dir=newsapi_output_dir,
+    #     output_prefix=f"newsapi_{suffix}",
+    # )
 
 
     # -----------------------------
