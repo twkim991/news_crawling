@@ -83,15 +83,59 @@ KEEP_GKG_COLUMNS = [
     "extras_xml",
 ]
 
-DEFAULT_TECH_KEYWORDS = [
+DEFAULT_TECH_KEYWORDS_EN = [
     "python", "java", "javascript", "typescript", "c++", "c#", "go", "rust", "kotlin", "swift", "dart",
     "react", "vue", "angular", "svelte", "next.js", "spring", "django", "fastapi", "express", "nestjs",
     "pytorch", "tensorflow", "scikit-learn", "pandas", "numpy", "openai", "hugging face", "langchain", "mlflow", "kubeflow",
-    "postgresql", "mysql", "oracle", "mongodb", "cassandra", "dynamodb", "redis", "memcached", "elasticsearch", "opensearch",
+
+    "postgresql", "postgres", "psql",
+    "mysql",
+    "sqlite", "sqlite3",
+    "microsoft sql server", "sql server", "mssql", "ssms",
+    "mongodb", "mongo db",
+    "redis", "redis cache",
+    "oracle", "cassandra", "dynamodb", "memcached", "elasticsearch", "opensearch",
+
     "aws", "google cloud", "azure", "naver cloud", "docker", "kubernetes",
-    "kafka", "spark", "dbt", "github actions", "gitlab ci", "jenkins", "terraform", "ansible", "prometheus", "grafana",
-    "github", "gitlab", "jira", "postman", "swagger", "vscode", "intellij",
+    "kafka", "spark", "dbt",
+
+    "github actions", "github workflow", "github workflows",
+    "gitlab ci", "gitlab ci/cd", "gitlab pipeline",
+    "jenkins", "jenkins pipeline", "jenkinsfile",
+    "terraform", "hashicorp terraform", "terraform module",
+
+    "ansible", "prometheus", "grafana",
 ]
+
+DEFAULT_TECH_KEYWORDS_KO = [
+    "인공지능", "생성형 ai", "머신러닝", "딥러닝", "대규모 언어 모델", "llm",
+    "프로그래밍", "개발자", "개발도구", "오픈소스", "소프트웨어", "기술스택",
+    "클라우드", "데브옵스", "인프라", "컨테이너", "쿠버네티스", "도커",
+    "데이터베이스", "관계형 데이터베이스", "분산 시스템", "데이터 파이프라인",
+    "백엔드", "프론트엔드", "웹 프레임워크", "모바일 앱", "API", "마이크로서비스",
+
+    "파이썬", "자바", "자바스크립트", "타입스크립트", "러스트", "고", "고언어", "코틀린", "스위프트",
+    "리액트", "뷰", "앵귤러", "스벨트", "넥스트js", "넥스트", "장고", "패스트api", "익스프레스", "네스트js",
+    "파이토치", "텐서플로", "허깅페이스", "오픈ai",
+
+    "포스트그레sql", "포스트그레스", "postgresql",
+    "마이에스큐엘", "mysql",
+    "sqlite", "sqlite3",
+    "sql server", "mssql", "마이크로소프트 sql 서버",
+    "몽고db", "mongodb",
+    "레디스", "redis",
+
+    "깃허브 액션", "github actions",
+    "깃랩 ci/cd", "gitlab ci/cd",
+    "젠킨스", "jenkins",
+    "테라폼", "terraform",
+
+    "카프카", "kafka",
+    "스파크", "spark",
+    "에어플로", "airflow",
+]
+
+DEFAULT_TECH_KEYWORDS = DEFAULT_TECH_KEYWORDS_EN + DEFAULT_TECH_KEYWORDS_KO
 
 TEXT_DECODE_ATTEMPTS = (
     ("utf-8", "strict"),
@@ -451,6 +495,16 @@ def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None =
                 | series.str.contains("cyber", case=False, regex=False, na=False)
                 | series.str.contains("cloud", case=False, regex=False, na=False)
                 | series.str.contains("data", case=False, regex=False, na=False)
+
+                | series.str.contains("기술", case=False, regex=False, na=False)
+                | series.str.contains("소프트웨어", case=False, regex=False, na=False)
+                | series.str.contains("인공지능", case=False, regex=False, na=False)
+                | series.str.contains("생성형", case=False, regex=False, na=False)
+                | series.str.contains("클라우드", case=False, regex=False, na=False)
+                | series.str.contains("데이터", case=False, regex=False, na=False)
+                | series.str.contains("개발", case=False, regex=False, na=False)
+                | series.str.contains("프로그래밍", case=False, regex=False, na=False)
+                | series.str.contains("오픈소스", case=False, regex=False, na=False)
             )
             series = series.loc[prefilter]
 
@@ -487,6 +541,21 @@ def filter_tech_gkg_records(df: pd.DataFrame, extra_keywords: list[str] | None =
 
     print("[filter_tech_gkg_records] deduped rows:", len(deduped))
     return deduped
+
+
+def _detect_text_language(text: str) -> str:
+    text = str(text).strip()
+    if not text:
+        return "unknown"
+
+    ko_count = len(re.findall(r"[가-힣]", text))
+    en_count = len(re.findall(r"[A-Za-z]", text))
+
+    if ko_count >= 3 and ko_count >= en_count:
+        return "ko"
+    if en_count >= 3:
+        return "en"
+    return "unknown"
 
 
 def _slug_to_title(url: str) -> str:

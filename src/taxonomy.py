@@ -11,18 +11,18 @@ TECH_STACK_TAXONOMY = {
         ),
         "subgroups": {
             "Languages": {
-                "Python": ["python", "cpython", "pypi", "python 3"],
-                "JavaScript": ["javascript", "ecmascript", "js"],
-                "TypeScript": ["typescript", "tsc", "ts"],
+                "Python": ["python", "cpython", "pypi", "python 3", "파이썬"],
+                "JavaScript": ["javascript", "ecmascript", "js", "자바스크립트"],
+                "TypeScript": ["typescript", "tsc", "ts", "타입스크립트"],
                 "C#": ["c#", "csharp", ".net c#", "dotnet c#"],
                 "C++": ["c++", "cpp"],
                 "C": [" c language ", " ansi c ", " c programming ", "language c", "c lang"],
-                "Java": ["java", "openjdk", "jdk"],
-                "Kotlin": ["kotlin"],
+                "Java": ["java", "openjdk", "jdk", "자바"],
+                "Kotlin": ["kotlin", "코틀린"],
                 "PHP": ["php"],
-                "Swift": ["swift", "swiftlang"],
-                "Rust": ["rust", "rustlang", "rust-lang"],
-                "Go": ["golang", "go language", "go runtime", "go 1.", "language go"],
+                "Swift": ["swift", "swiftlang", "스위프트"],
+                "Rust": ["rust", "rustlang", "rust-lang", "러스트"],
+                "Go": ["golang", "go language", "go runtime", "go 1.", "language go", "고언어", "golang", "go 언어"],
                 "Ruby": ["ruby"],
             }
         },
@@ -34,12 +34,12 @@ TECH_STACK_TAXONOMY = {
         ),
         "subgroups": {
             "Frontend": {
-                "React": ["react", "reactjs", "react.js"],
-                "Angular": ["angular"],
-                "Vue": ["vue", "vue.js"],
-                "Svelte": ["svelte"],
-                "Next.js": ["next.js", "nextjs"],
-                "Nuxt.js": ["nuxt.js", "nuxtjs", "nuxt"],
+                "React": ["react", "reactjs", "react.js", "리액트"],
+                "Angular": ["angular", "앵귤러"],
+                "Vue": ["vue", "vue.js", "뷰", "뷰js"],
+                "Svelte": ["svelte", "스벨트"],
+                "Next.js": ["next.js", "nextjs", "넥스트js", "넥스트"],
+                "Nuxt.js": ["nuxt.js", "nuxtjs", "nuxt", "넉스트", "눅스트"],
             }
         },
     },
@@ -50,17 +50,17 @@ TECH_STACK_TAXONOMY = {
         ),
         "subgroups": {
             "Backend": {
-                "Node.js": ["node.js", "nodejs", "node js"],
-                "Express": ["express", "express.js", "expressjs"],
-                "Django": ["django"],
-                "FastAPI": ["fastapi"],
-                "Spring Boot": ["spring boot", "springboot"],
+                "Node.js": ["node.js", "nodejs", "node js", "노드js", "노드"],
+                "Express": ["express", "express.js", "expressjs", "익스프레스"],
+                "Django": ["django", "장고"],
+                "FastAPI": ["fastapi", "패스트api"],
+                "Spring Boot": ["spring boot", "springboot", "스프링 부트", "스프링부트"],
                 "ASP.NET Core": ["asp.net core", "asp net core", "aspnet core"],
                 "Deno": ["deno"],
                 "Laravel": ["laravel"],
                 "Rails": ["ruby on rails", "rails", "rails framework", "ror"],
                 "Flask": ["flask"],
-                "NestJS": ["nestjs", "nest.js", "nest js"],
+                "NestJS": ["nestjs", "nest.js", "nest js", "네스트js"],
                 "Axum": ["axum"],
                 "Actix-Web": ["actix-web", "actix web", "actix_web"],
                 "Rocket": ["rocket", "rocket.rs", "rocket framework"],
@@ -94,15 +94,39 @@ TECH_STACK_TAXONOMY = {
             }
         },
     },
-    "Infrastructure & DevOps": {
+     "Infrastructure & DevOps": {
         "description": (
             "containers, orchestration, deployment infrastructure, cloud-native operations, "
-            "컨테이너, 오케스트레이션, 인프라, 데브옵스"
+            "ci/cd, infrastructure as code, devops automation, "
+            "컨테이너, 오케스트레이션, 인프라, 데브옵스, CI/CD, IaC"
         ),
         "subgroups": {
             "Containers / Orchestration": {
                 "Docker": ["docker", "dockerfile", "docker desktop"],
                 "Kubernetes": ["kubernetes", "k8s"],
+            },
+            "CI/CD & IaC": {
+                "Jenkins": ["jenkins", "젠킨스", "jenkins pipeline", "jenkinsfile"],
+                "GitHub Actions": ["github actions", "github workflow", "github workflows", "깃허브 액션", "깃허브 액션스"],
+                "GitLab CI/CD": ["gitlab ci", "gitlab ci/cd", "gitlab pipeline", "gitlab pipelines", "깃랩 ci/cd", "깃랩 파이프라인"],
+                "Terraform": ["terraform", "hashicorp terraform", "terraform module", "terraform state", "테라폼"],
+
+            },
+        },
+    },
+    "Data / DB": {
+        "description": (
+            "relational databases, nosql databases, in-memory data stores, database engines, "
+            "관계형 데이터베이스, NoSQL 데이터베이스, 인메모리 저장소, 데이터베이스 엔진"
+        ),
+        "subgroups": {
+            "Databases": {
+                "PostgreSQL": ["postgresql", "postgres", "psql", "포스트그레sql", "포스트그레스", "포스트그레"],
+                "MySQL": ["mysql", "마이에스큐엘", "my sql"],
+                "SQLite": ["sqlite", "sqlite3", "sqlite 3"],
+                "Microsoft SQL Server": ["microsoft sql server", "sql server", "mssql", "ms sql server", "ssms", "마이크로소프트 sql 서버"],
+                "Redis": ["redis", "redis cache", "레디스"],
+                "MongoDB": ["mongodb", "mongo db", "몽고db", "몽고 디비"],
             }
         },
     },
@@ -140,14 +164,19 @@ STACK_DISAMBIGUATION = {
             "script", "scripting", "interpreter", "jupyter", "notebook",
             "pip", "virtualenv", "poetry", "pyproject", "pytest",
             "machine learning", "data science",
+
+            "파이썬", "파이썬 패키지", "파이썬 라이브러리", "인터프리터",
+            "주피터", "노트북", "데이터 사이언스", "머신러닝",
         ],
         "negative_keywords": [
             "snake", "snakes", "venom", "venomous", "bite", "bites",
             "reptile", "reptiles", "serpent", "serpents",
             "blood", "antivenom", "species", "wildlife", "zoology",
             "python snake", "python meat", "python skin", "Monty",
+
+            "비단뱀", "뱀", "파충류", "독사", "야생동물",
         ],
-        "supporting_entities": ["python software foundation", "pypi", "cpython", "anaconda"],
+        "supporting_entities": ["python software foundation", "pypi", "cpython", "anaconda" "파이썬 소프트웨어 재단"],
     },
     "React": {
         "ambiguous": True,
@@ -160,8 +189,22 @@ STACK_DISAMBIGUATION = {
             "reacts", "reacted", "reacting", "reaction", "reactions",
             "reactor", "reactors", "react to", "market reacts",
             "fans react", "people react", "overreact", "interactive", "reacts with", "reacts to", "reacted to", "reacting to", "people react", "fans react", "overreact", "interactive",
+
+            "리액트", "리액트 네이티브", "프론트엔드", "웹앱", "컴포넌트", "상태관리",
         ],
-        "supporting_entities": ["meta", "reactjs", "react native", "jsx"],
+        "supporting_entities": ["meta", "reactjs", "react native", "jsx", "메타"],
+    },
+    "Vue": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "vue.js", "nuxt", "frontend", "component", "composition api", "vite",
+            "뷰", "뷰js", "프론트엔드", "컴포넌트",
+        ],
+        "negative_keywords": [
+            "view", "views", "viewer", "point of view"
+        ],
+        "supporting_entities": ["vue.js", "nuxt", "vite"],
     },
     "Rocket": {
         "ambiguous": True,
@@ -309,19 +352,106 @@ STACK_DISAMBIGUATION = {
         "negative_keywords": ["Partial Hospitalization Program", "public housing program", "personal health plan"],
         "supporting_entities": ["Laravel", "Symfony", "CodeIgniter", "CakePHP"],
     },
+     "Jenkins": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "ci/cd", "pipeline", "deploy", "deployment", "automation",
+            "jenkins pipeline", "jenkinsfile",
+
+            "배포", "배포 자동화", "파이프라인", "ci/cd", "빌드 자동화",
+        ],
+        "negative_keywords": [],
+        "supporting_entities": ["cloudbees", "jenkinsfile", "젠킨스"],
+    },
+    "Terraform": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "iac", "infrastructure as code", "hashicorp", "terraform module",
+            "terraform state", "terraform plan", "terraform apply",
+
+            "인프라 자동화", "코드형 인프라", "프로비저닝", "테라폼", "해시코프",
+        ],
+        "negative_keywords": [],
+        "supporting_entities": ["hashicorp", "hcp", "해시코프"],
+    },
+    "Microsoft SQL Server": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "mssql", "microsoft sql server", "ssms", "sql server agent",
+            "t-sql", "transact-sql", "sql server management studio", "sql server reporting services",
+        ],
+        "negative_keywords": [],
+        "supporting_entities": ["microsoft", "azure data studio", "sql server management studio"],
+    },
+    "Redis": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "cache", "caching", "in-memory", "key-value", "pub/sub", "replica",
+            "cluster", "redis cache", "redis server",
+
+            "캐시", "인메모리", "키값", "레디스", "레디스 캐시", "클러스터",
+        ],
+        "negative_keywords": [],
+        "supporting_entities": ["redis labs", "redis inc", "레디스"],
+    },
+    "MongoDB": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "document database", "nosql", "atlas", "bson", "collection",
+            "문서형 데이터베이스", "nosql", "컬렉션", "몽고db",
+        ],
+        "negative_keywords": [],
+        "supporting_entities": ["mongodb atlas", "mongo db", "몽고db"],
+    },
+    "PostgreSQL": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "postgresql", "postgres", "psql", "database", "sql", "extension",
+            "데이터베이스", "sql", "포스트그레sql", "포스트그레스", "psql",
+        ],
+        "negative_keywords": [],
+        "supporting_entities": ["postgresql", "postgres", "포스트그레sql"],
+    },
+    "MySQL": {
+        "ambiguous": True,
+        "requires_context": True,
+        "context_keywords": [
+            "mysql", "database", "sql", "mysql server", "mysql shell",
+            "데이터베이스", "sql", "마이에스큐엘",
+        ],
+        "negative_keywords": [],
+        "supporting_entities": ["oracle", "mysql", "마이에스큐엘"],
+    },
 }
 
 
 STACK_VENDOR_SIGNALS = {
-    "React": ["meta", "jsx", "component", "components", "react native", "frontend"],
-    "Docker": ["docker inc", "docker hub", "dockerfile", "container"],
-    "Kubernetes": ["cncf", "pod", "cluster", "helm", "kubelet"],
-    "PyTorch": ["meta", "tensor", "training", "inference"],
-    "Spark": ["apache", "databricks", "pyspark"],
+    "React": ["meta", "jsx", "component", "components", "react native", "frontend", "메타", "컴포넌트", "프론트엔드"],
+    "Docker": ["docker inc", "docker hub", "dockerfile", "container", "도커", "컨테이너"],
+    "Kubernetes": ["cncf", "pod", "cluster", "helm", "kubelet", "쿠버네티스", "파드", "클러스터"],
+    "PyTorch": ["meta", "tensor", "training", "inference", "메타", "학습", "추론"],
+    "Spark": ["apache", "databricks", "pyspark", "아파치", "데이터브릭스"],
     "Rails": ["ruby", "activerecord", "rubygems"],
-    "Express": ["node.js", "middleware", "router"],
-    "Python": ["pypi", "cpython", "python software foundation", "pip"],
-    "Rocket": ["rocket.rs", "crate", "crates.io", "rust"],
+    "Express": ["node.js", "middleware", "router", "노드js", "미들웨어", "라우터"],
+    "Python": ["pypi", "cpython", "python software foundation", "pip", "파이썬", "파이파이", "주피터"],
+    "Rocket": ["rocket.rs", "crate", "crates.io", "rust", "러스트"],
+
+    "Jenkins": ["cloudbees", "jenkinsfile", "pipeline", "agent", "젠킨스", "파이프라인"],
+    "GitHub Actions": ["github", "workflow", "workflow dispatch", "runner", "깃허브", "워크플로", "러너"],
+    "GitLab CI/CD": ["gitlab", "pipeline", "runner", ".gitlab-ci.yml", "깃랩", "파이프라인", "러너"],
+    "Terraform": ["hashicorp", "iac", "provider", "state", "해시코프", "코드형 인프라", "프로바이더"],
+    "PostgreSQL": ["postgresql", "postgres", "psql", "포스트그레sql", "포스트그레스"],
+    "MySQL": ["mysql", "mysql server", "mysql shell", "마이에스큐엘"],
+    "SQLite": ["sqlite", "sqlite3"],
+    "Microsoft SQL Server": ["microsoft", "mssql", "ssms", "t-sql", "마이크로소프트", "sql 서버"],
+    "Redis": ["redis", "cache", "in-memory", "레디스", "캐시", "인메모리"],
+    "MongoDB": ["mongodb", "document database", "atlas", "bson", "몽고db", "문서형 데이터베이스"],
 }
 
 

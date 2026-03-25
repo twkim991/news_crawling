@@ -208,6 +208,9 @@ def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
     working["devtech_text_signal"] = (
         title_series + " " + description_series + " " + content_series
     ).str.strip()
+    if "detected_lang" not in working.columns:
+        combined_text = (title_series + " " + description_series + " " + content_series).str.strip()
+        working["detected_lang"] = combined_text.str.contains(r"[가-힣]", regex=True).map(lambda x: "ko" if x else "en")
     working["matched_devtech_aliases"] = matched_stack_names
     working["matched_devtech_reasons"] = matched_debug_reasons
     working["all_devtech_rule_logs"] = all_rule_logs
@@ -218,6 +221,7 @@ def _apply_devtech_keyword_gate(df: pd.DataFrame) -> pd.DataFrame:
         pd.Series(matched_stack_names).str.strip().ne("")
         & (pd.Series(gate_pass_flags).astype(int) == 1)
     ).astype(int)
+    
 
     return working
 
@@ -750,6 +754,7 @@ def run_gdelt_analysis(
         "article_week",
         "article_month",
         "classification_type",
+        "detected_lang",
         "tech_bucket",
         "tech_category",
         "tech_category_score",
