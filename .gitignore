@@ -206,8 +206,20 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-/models/
-/data/
-/outputs/
+/models/*
+/data/*
+/outputs/*
+
+!/data/processed/
+!/data/raw/
+
+/data/processed/*
+/data/raw/*
+
+!/data/processed/ag_test_processed.csv
+!/data/raw/test.csv
+!/models/ag_test_embeddings.npy
+
+
 /temp.py
 node_modules/
